@@ -1,0 +1,24 @@
+{
+  "name": "digify-property-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Digify Property Studio — AI Property Content Platform",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev:desktop": "pnpm --filter @digify/desktop dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
+}
