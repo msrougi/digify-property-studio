@@ -233,8 +233,12 @@ aqui para evitar duplicação) — incluindo um novo relacionado ao Player: `pat
 Node não existe no `require("url")` polyfillado do preload sandboxado do Electron, só no
 processo main com Node completo.
 
-**Ainda não implementado nesta fase**: Reflection (analyze+act — pesquisa de viabilidade em
-andamento, ver `docs/CAPABILITY_REGISTRY.md`), linhas verticais/distorção de lente dentro de
+**Ainda não implementado nesta fase**: Reflection (analyze+act) — pesquisa exaustiva feita
+(MirrorNet, GDNet, 3DRef, ADE20K/CSAILVision, ONNX Model Zoo, Objects365), sem sinal real
+disponível: todo modelo com a classe "espelho/vidro" certa hospeda pesos fora do allowlist de
+rede deste ambiente, e diferente do Home Staging não existe um fallback clássico honesto (uma
+heurística de "brilho = reflexo" seria só ruído, não uma versão limitada da capability — ver
+`docs/vision/REFLECTION.md`). Também faltam: linhas verticais/distorção de lente dentro de
 Perspective, exportação em múltiplos formatos/presets por rede social (a exportação atual
 entrega o MP4/H.264 já renderizado — suficiente para uso real, mas sem os presets específicos
 do catálogo original), inpainting generativo real para Home Staging (fica para a camada
