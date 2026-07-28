@@ -247,11 +247,13 @@ aqui para evitar duplicação) — incluindo um novo relacionado ao Player: `pat
 Node não existe no `require("url")` polyfillado do preload sandboxado do Electron, só no
 processo main com Node completo.
 
-**Ainda não implementado nesta fase**: Reflection (analyze+act) — pesquisa exaustiva feita
-(MirrorNet, GDNet, 3DRef, ADE20K/CSAILVision, ONNX Model Zoo, Objects365), sem sinal real
-disponível: todo modelo com a classe "espelho/vidro" certa hospeda pesos fora do allowlist de
-rede deste ambiente, e diferente do Home Staging não existe um fallback clássico honesto (uma
-heurística de "brilho = reflexo" seria só ruído, não uma versão limitada da capability — ver
+**Ainda não implementado nesta fase**: Reflection (analyze+act) — pesquisa em duas rodadas
+(MirrorNet, GDNet, 3DRef, ADE20K/CSAILVision, ONNX Model Zoo, Objects365, XReflection,
+SAM2-UNet); o único candidato com pesos hospedados de forma acessível neste ambiente
+(`PINTO0309/reflection-removal`, GitHub Releases) foi baixado e testado de verdade contra
+ground truth sintético — reprovou (piora a imagem em vez de melhorar, autor já avisa que é
+WIP). Diferente do Home Staging não existe um fallback clássico honesto (uma heurística de
+"brilho = reflexo" seria só ruído, não uma versão limitada da capability — ver
 `docs/vision/REFLECTION.md`). Também falta: distorção de lente grande angular
 (barril/pincushion) dentro de Perspective — horizonte e linhas verticais já corrigidos de
 verdade. Os 8 perfis de Color do catálogo original e o inpainting generativo real do Home

@@ -33,3 +33,10 @@ tools/object-detector/*.onnx
 tools/inpainting/.venv/
 tools/inpainting/models/
 apps/desktop/models/lama_inpainting.onnx
+
+# tools/reflection-removal: pesos ONNX de teste (~89MB cada) e imagens
+# intermediárias geradas pelo teste empírico. O modelo foi testado e
+# reprovado (ver README.md do diretório) — nada aqui é usado em produção.
+tools/reflection-removal/.venv/
+tools/reflection-removal/models/
+tools/reflection-removal/testimgs/
