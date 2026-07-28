@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ImportPanel } from "./components/ImportPanel.js";
 import { ProjectList } from "./components/ProjectList.js";
 import { Timeline } from "./components/Timeline.js";
+import { RenderPanel } from "./components/RenderPanel.js";
 
 export function App(): JSX.Element {
   const [projects, setProjects] = useState<ProjectDTO[]>([]);
@@ -54,6 +55,13 @@ export function App(): JSX.Element {
         <section>
           <h2 className="section-title">Timeline</h2>
           <Timeline scenes={scenes} />
+        </section>
+      )}
+
+      {selectedProjectId && (
+        <section>
+          <h2 className="section-title">Melhorias</h2>
+          <RenderPanel projectId={selectedProjectId} />
         </section>
       )}
     </div>

@@ -20,7 +20,7 @@ function createWindow(): void {
     console.error("Falha ao carregar preload", preloadPath, error);
   });
 
-  const digify = bootstrap(join(app.getPath("userData"), "digify.sqlite"));
+  const digify = bootstrap(app.getPath("userData"));
   registerIpcHandlers(digify, window);
 
   if (process.env["ELECTRON_RENDERER_URL"]) {

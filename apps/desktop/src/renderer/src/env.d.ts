@@ -16,11 +16,19 @@ interface SceneDTO {
   roomType: string | null;
 }
 
+type ColorProfile = "warm" | "minimal" | "luxury";
+
+interface RenderPreviewDTO {
+  outputPath: string;
+  appliedCorrections: string[];
+}
+
 interface DigifyApi {
   selectVideoFile(): Promise<string | null>;
   importVideo(filePath: string): Promise<ProjectDTO>;
   listProjects(): Promise<ProjectDTO[]>;
   getScenes(projectId: string): Promise<SceneDTO[]>;
+  renderPreview(projectId: string, colorProfile: ColorProfile): Promise<RenderPreviewDTO>;
 }
 
 interface Window {

@@ -1,5 +1,6 @@
 import { dialog, ipcMain, type BrowserWindow } from "electron";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
+import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
 
 export interface ProjectDTO {
   id: string;
@@ -15,6 +16,11 @@ export interface SceneDTO {
   startMs: number;
   endMs: number;
   roomType: string | null;
+}
+
+export interface RenderPreviewDTO {
+  outputPath: string;
+  appliedCorrections: string[];
 }
 
 /**
@@ -45,6 +51,13 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     const scenes = await app.sceneRepository.findByProject(projectId);
     return scenes.map(toSceneDto);
   });
+
+  ipcMain.handle(
+    "projects:renderPreview",
+    async (_event, projectId: string, colorProfile: ColorProfile): Promise<RenderPreviewDTO> => {
+      return app.renderPreview.execute({ projectId, colorProfile });
+    },
+  );
 }
 
 function toProjectDto(project: {

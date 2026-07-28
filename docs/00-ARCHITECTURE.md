@@ -171,20 +171,31 @@ capability):
   placeholder): duração, resolução, fps, codec, áudio.
 * Capability `scene.detect` — segmentação **real** de cenas via filtro de scene-change do
   FFmpeg (determinístico).
+* Capability `lighting.analyze` — mede luminância real (FFmpeg `signalstats`), classifica
+  subexposto/normal/superexposto.
+* Capabilities `lighting.act` e `color.act` — decidem correção de brilho e color grading
+  (perfis Warm/Minimal/Luxury) como filtros FFmpeg prontos para execução. Decidem, não
+  executam ("A IA decide. O Rendering Engine executa.").
+* **Rendering Engine** real (`RenderingEngine`) — executa a cadeia de filtros decidida via
+  FFmpeg, produzindo um arquivo de vídeo novo (nunca sobrescreve o original — reversível por
+  construção).
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
-  Detect → persistência → Timeline** funcionando de ponta a ponta, verificado com lançamento
-  real via `xvfb-run` + Playwright/CDP controlando a janela de verdade (não apenas build).
+  Detect → persistência → Timeline → Aplicar melhorias (Lighting + Color) → vídeo renderizado
+  real** funcionando de ponta a ponta, verificado com lançamento real via `xvfb-run` +
+  Playwright/`_electron` controlando a janela de verdade e clicando os botões reais da UI
+  (não apenas build, nem chamadas diretas de API pulando a interface).
 
-Dois bugs de bundling só visíveis em execução real foram encontrados e corrigidos nesta
-etapa (registrados no changelog do commit, não repetidos aqui para evitar duplicação com
-`docs/ENGINEERING_STANDARDS.md`).
+Bugs de bundling só visíveis em execução real foram encontrados e corrigidos nestas etapas
+(registrados no changelog dos commits e em `docs/ENGINEERING_STANDARDS.md`, não repetidos
+aqui para evitar duplicação).
 
 **Ainda não implementado nesta fase**: Room/Object detection reais (dependem de modelo de
 visão computacional treinado — fora do que este ambiente de desenvolvimento consegue
-produzir; a capability já está arquitetada e aguardando o modelo), capabilities de Production
-(Lighting/Color), Rendering Engine, Export Manager, Player de vídeo. Home Staging e demais
-capabilities do catálogo, Plugin SDK/Marketplace, Cloud (sync, colaboração, render
-distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já preparada para
+produzir; as capabilities já estão arquitetadas e aguardando o modelo), Perspective/Reflection
+(analyze+act), Home Staging, Export Manager (exportação final com todos os formatos/redes
+sociais), Player de vídeo, 5 dos 8 perfis de Color originais. Marketplace, Plugin SDK, Cloud
+(sync, colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo —
+arquitetura já preparada para
 recebê-los sem redesenho (Plugin First / Capability Architecture): cada um entra como uma
 nova capability registrada no PIE™, sem alterar o núcleo.
 

@@ -28,7 +28,7 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 | `room.recognize` | Vision | Classifica o ambiente (sala, cozinha, quarto, ...) e relevância comercial. | planned |
 | `object.detect` | Vision | Detecção + tracking de objetos com máscara, bounding box, categoria, confidence. | planned |
 | `property.score` | Vision | Nota 0–100 de potencial comercial (iluminação, estabilidade, composição, organização). | planned |
-| `lighting.analyze` | Vision | Analisa luz natural/artificial, sombras, temperatura de cor. Produz achados para o PKG™. | planned |
+| `lighting.analyze` | Vision | Mede luminância média real via FFmpeg `signalstats`, classifica subexposto/normal/superexposto. Determinístico, não é modelo de IA — confidence sempre 100. Sombras/temperatura de cor ainda não medidas. | shipped |
 | `perspective.analyze` | Vision | Detecta horizonte, linhas verticais, distorção de lente. | planned |
 | `reflection.analyze` | Vision | Detecta superfícies reflexivas e objetos indesejados refletidos (equipe/tripé). | planned |
 
@@ -36,8 +36,8 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `lighting.act` | Production | Aplica correção de iluminação com base em `lighting.analyze`. Nunca altera a atmosfera original. | planned |
-| `color.act` | Production | Color grading por perfil (Luxury, Minimal, Modern, ...). | planned |
+| `lighting.act` | Production | Decide a correção de brilho a partir de `lighting.analyze` (não executa — quem executa é o Rendering Engine). Nunca altera a atmosfera original além do necessário. | shipped |
+| `color.act` | Production | Decide o filtro de color grading para os perfis Warm/Minimal/Luxury. Demais perfis do catálogo original (Modern, Industrial, Beach, Scandinavian, Corporate) ainda não mapeados. | shipped (3 de 8 perfis) |
 | `perspective.act` | Production | Corrige horizonte/distorção com base em `perspective.analyze`. | planned |
 | `reflection.act` | Production | Remove objetos refletidos indesejados com base em `reflection.analyze`. | planned |
 | `home_staging.act` | Production | Remove itens temporários (nunca estrutura/mobiliário fixo). Toda remoção é reversível. | planned |
@@ -73,8 +73,12 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 
 ## Fora da taxonomia de capabilities (não são agentes do PIE™)
 
+* **Rendering Engine** (`apps/desktop/src/infrastructure/render/RenderingEngine.ts`) —
+  executa via FFmpeg real a cadeia de filtros já decidida pelas capabilities de Production
+  (`lighting.act`, `color.act`, ...). "A IA decide, o Rendering Engine executa" — nunca o
+  contrário. Não é uma capability porque não decide nada, apenas processa.
 * **Export** — responsabilidade do `Export Manager`, dentro do Rendering Engine (ADR-0001,
-  item E), não do PIE™.
+  item E), não do PIE™. Ainda não implementado.
 
 ## Regras de todo capability
 
