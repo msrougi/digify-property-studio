@@ -6,19 +6,30 @@ export type ProjectStatus =
   | "exported"
   | "error";
 
+export interface VideoMetadataProps {
+  durationMs: number;
+  width: number;
+  height: number;
+  fps: number;
+  codecName: string;
+  hasAudio: boolean;
+}
+
 export interface ProjectProps {
   id: string;
   name: string;
   sourceVideoPath: string;
   sourceVideoHash: string;
   status: ProjectStatus;
+  video: VideoMetadataProps;
   createdAt: Date;
   updatedAt: Date;
 }
 
 /**
  * Raiz de agregado do projeto. Nunca contém bytes de vídeo — apenas o caminho no
- * sistema de arquivos (docs/00-ARCHITECTURE.md, seção 9).
+ * sistema de arquivos (docs/00-ARCHITECTURE.md, seção 9). Os metadados de vídeo
+ * (duração/resolução/fps/codec/áudio) vêm da capability `intake` (ffprobe real).
  */
 export class Project {
   private constructor(private props: ProjectProps) {}
@@ -28,6 +39,7 @@ export class Project {
     name: string;
     sourceVideoPath: string;
     sourceVideoHash: string;
+    video: VideoMetadataProps;
     now?: Date;
   }): Project {
     const now = input.now ?? new Date();
@@ -37,6 +49,7 @@ export class Project {
       sourceVideoPath: input.sourceVideoPath,
       sourceVideoHash: input.sourceVideoHash,
       status: "importing",
+      video: input.video,
       createdAt: now,
       updatedAt: now,
     });

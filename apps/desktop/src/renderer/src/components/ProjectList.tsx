@@ -9,9 +9,11 @@ const STATUS_LABEL: Record<string, string> = {
 
 interface ProjectListProps {
   projects: ProjectDTO[];
+  selectedProjectId: string | null;
+  onSelect: (projectId: string) => void;
 }
 
-export function ProjectList({ projects }: ProjectListProps): JSX.Element {
+export function ProjectList({ projects, selectedProjectId, onSelect }: ProjectListProps): JSX.Element {
   if (projects.length === 0) {
     return <p className="empty-state">Nenhum projeto ainda. Importe um vídeo para começar.</p>;
   }
@@ -19,12 +21,17 @@ export function ProjectList({ projects }: ProjectListProps): JSX.Element {
   return (
     <div className="project-list">
       {projects.map((project) => (
-        <div className="project-card" key={project.id}>
+        <button
+          type="button"
+          className={`project-card ${project.id === selectedProjectId ? "project-card--selected" : ""}`}
+          key={project.id}
+          onClick={() => onSelect(project.id)}
+        >
           <span className="project-card__name">{project.name}</span>
           <span className="project-card__status">
             {STATUS_LABEL[project.status] ?? project.status}
           </span>
-        </div>
+        </button>
       ))}
     </div>
   );

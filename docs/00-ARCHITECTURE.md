@@ -161,21 +161,32 @@ Alvo desta fase (núcleo de produção completo do Desktop):
 **Concluído até aqui** (ver `docs/CAPABILITY_REGISTRY.md` para status vivo, capability a
 capability):
 
-* Domain Layer (`Project`, `Scene`, `DetectedObject`, `Confidence`) + Repository Pattern.
-* Banco local SQLite (`@digify/database`), nunca armazena vídeo.
+* Domain Layer (`Project` com metadados reais de vídeo, `Scene`, `DetectedObject`,
+  `Confidence`) + Repository Pattern.
+* Banco local SQLite (`@digify/database`) com runner de migrations versionado
+  (`schema_migrations`), nunca armazena vídeo.
 * PIE™ completo (`@digify/pie`): Capability Registry, Event Bus, orquestrador com gate de
   confidence.
-* Capability `intake` (hash + metadados de arquivo; extração via ffprobe é próximo passo).
-* App Desktop Electron real (main/preload/renderer), rodando (verificado com lançamento real
-  via `xvfb-run`, não apenas build) com fluxo **Import → Intake → persistência → lista de
-  projetos** funcionando de ponta a ponta.
+* Capability `intake` — hash SHA-256 + metadados **reais** de vídeo via FFprobe (não
+  placeholder): duração, resolução, fps, codec, áudio.
+* Capability `scene.detect` — segmentação **real** de cenas via filtro de scene-change do
+  FFmpeg (determinístico).
+* App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
+  Detect → persistência → Timeline** funcionando de ponta a ponta, verificado com lançamento
+  real via `xvfb-run` + Playwright/CDP controlando a janela de verdade (não apenas build).
 
-**Ainda não implementado nesta fase**: Scene/Room/Object detection reais, capabilities de
-Production (Lighting/Color), Rendering Engine, Export Manager, Timeline/Player visual.
-Home Staging e demais capabilities do catálogo, Plugin SDK/Marketplace, Cloud (sync,
-colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
-preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
-entra como uma nova capability registrada no PIE™, sem alterar o núcleo.
+Dois bugs de bundling só visíveis em execução real foram encontrados e corrigidos nesta
+etapa (registrados no changelog do commit, não repetidos aqui para evitar duplicação com
+`docs/ENGINEERING_STANDARDS.md`).
+
+**Ainda não implementado nesta fase**: Room/Object detection reais (dependem de modelo de
+visão computacional treinado — fora do que este ambiente de desenvolvimento consegue
+produzir; a capability já está arquitetada e aguardando o modelo), capabilities de Production
+(Lighting/Color), Rendering Engine, Export Manager, Player de vídeo. Home Staging e demais
+capabilities do catálogo, Plugin SDK/Marketplace, Cloud (sync, colaboração, render
+distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já preparada para
+recebê-los sem redesenho (Plugin First / Capability Architecture): cada um entra como uma
+nova capability registrada no PIE™, sem alterar o núcleo.
 
 ## 12. Referências
 

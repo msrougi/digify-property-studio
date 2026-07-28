@@ -10,30 +10,53 @@ Master Index original mas nunca entregues (ADR-0001, item B).
 * **UI:** Tailwind CSS + shadcn/ui, seguindo os tokens em `docs/reference/original-docs/16 -
   Design System.md` (documento válido sem alterações).
 * **Banco local:** SQLite via `better-sqlite3`, migrations versionadas.
-* **IA local:** `onnxruntime-node` (ver ADR-0001, item G). Nunca Python no caminho crítico
-  offline.
-* **Testes:** Vitest (unit/integration), Playwright (E2E do shell Electron quando aplicável).
+* **Processamento de vídeo determinístico:** FFmpeg/FFprobe reais via `ffmpeg-static` /
+  `ffprobe-static` (binários reais, não simulados) — usados para metadados (`intake`) e
+  segmentação de cena (`scene.detect`). Não são "IA": são processamento de sinal
+  determinístico, por isso essas capabilities sempre reportam confidence 100.
+* **IA local (modelos treinados/ML):** `onnxruntime-node` (ver ADR-0001, item G). Nunca
+  Python no caminho crítico offline. Ainda não integrado — capabilities que dependem de
+  modelo treinado (`room.recognize`, `object.detect`, ...) seguem `planned` em
+  `docs/CAPABILITY_REGISTRY.md` até haver um modelo real para plugar.
+* **Testes:** Vitest (unit/integration, sempre com vídeos sintéticos reais gerados via
+  FFmpeg — nunca arquivos fake/texto disfarçados de vídeo). Playwright + `_electron`
+  (`require('playwright')._electron`) para E2E do shell Electron real via CDP.
 
-## Estrutura de camadas (obrigatória)
+## Estrutura de camadas (real, não aspiracional)
 
 ```
 apps/desktop/
   src/
-    presentation/   # UI, janelas, painéis — nunca contém regra de negócio
-    application/     # casos de uso, coordena fluxos, nunca decide IA
-    domain/          # entidades, regras de negócio, Repository interfaces
-    infrastructure/  # SQLite, sistema de arquivos, SO, GPU
+    main/            # processo principal Electron — cria janela, registra IPC
+    preload/          # contextBridge — SEMPRE build para .cjs (ver nota abaixo)
+    renderer/          # UI React (presentation) — nunca contém regra de negócio
+    application/         # casos de uso, coordena fluxos, nunca decide IA
+    infrastructure/        # capabilities concretas, ffmpeg, composition root (bootstrap.ts)
 packages/
-  pie/               # orquestrador, Capability Registry, Event Bus
-  vision/             # capabilities Vision (somente leitura)
-  production/          # capabilities Production (mutating, reversível)
-  render/               # Rendering Engine + Export Manager
-  design-system/        # componentes e tokens compartilhados
+  domain/              # entidades, regras de negócio, Repository interfaces (compartilhado)
+  database/             # implementação SQLite dos repositories
+  pie/                   # orquestrador, Capability Registry, Event Bus
 ```
 
-Regra de dependência: `presentation → application → domain ← infrastructure`. `domain` nunca
-importa de `infrastructure` ou `presentation`. `pie`, `vision`, `production`, `render` só se
-comunicam através de contratos de evento — nunca import direto entre si.
+`vision/`, `production/`, `render/`, `design-system/` como pacotes próprios ainda não existem
+— as capabilities atuais vivem em `apps/desktop/src/infrastructure/capabilities/` porque só
+há duas. Extrair para pacotes é um refactor futuro quando o número de capabilities justificar
+(evitar abstração prematura).
+
+Regra de dependência: `renderer → application → domain ← infrastructure`. `domain` (em
+`packages/domain`) nunca importa de `infrastructure` ou `renderer`. Módulos só se comunicam
+através de contratos de evento (`@digify/pie`) — nunca import direto entre capabilities.
+
+## Preload do Electron: sempre `.cjs`, nunca `.js`/`.mjs`
+
+Como `apps/desktop/package.json` tem `"type": "module"`, um preload `.js` é tratado como ESM
+pelo Node — e Electron carrega preload via `require()`, que falha com `ERR_REQUIRE_ESM`
+**silenciosamente para o usuário** (só aparece no evento `webContents.on('preload-error', ...)`,
+nunca no console padrão nem trava a aplicação — a UI carrega normalmente, só `window.digify`
+fica `undefined`). `electron.vite.config.ts` força `output.format: "cjs"` +
+`entryFileNames: "[name].cjs"` para o build de preload. Mantenha o listener de
+`preload-error` em `main/index.ts` permanentemente — é a única forma confiável de detectar
+essa classe de erro em produção.
 
 ## Padrão de commit e revisão
 

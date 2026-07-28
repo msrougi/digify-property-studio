@@ -1,27 +1,24 @@
 import { createHash } from "node:crypto";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import { basename } from "node:path";
 import { Confidence } from "@digify/domain";
 import type { Capability, CapabilityResult } from "@digify/pie";
+import { readVideoMetadata, type VideoMetadata } from "../ffmpeg/ffprobeMetadata.js";
 
 export interface IntakeInput {
   filePath: string;
 }
 
-export interface IntakeOutput {
+export interface IntakeOutput extends VideoMetadata {
   sourceVideoHash: string;
-  sizeBytes: number;
   fileName: string;
 }
 
 /**
  * Capability `intake` — docs/CAPABILITY_REGISTRY.md.
  *
- * Nesta fase implementa apenas hash + metadados de arquivo (determinístico,
- * confidence sempre 100). Extração de codec/fps/HDR/resolução via ffprobe é um
- * capability seguinte — não implementado ainda (docs/00-ARCHITECTURE.md, seção 3:
- * toda capability nasce atrás de uma interface estável para o modelo/ferramenta
- * real entrar depois sem redesenho).
+ * Hash SHA-256 + metadados reais de vídeo via FFprobe (duração, resolução, fps,
+ * codec, áudio). Determinístico, confidence sempre 100.
  */
 export class IntakeCapability implements Capability<IntakeInput, IntakeOutput> {
   readonly id = "intake";
@@ -29,13 +26,15 @@ export class IntakeCapability implements Capability<IntakeInput, IntakeOutput> {
   readonly mutatesMedia = false;
 
   async execute(input: IntakeInput): Promise<CapabilityResult<IntakeOutput>> {
-    const stats = statSync(input.filePath);
-    const sourceVideoHash = await this.hashFile(input.filePath);
+    const [sourceVideoHash, metadata] = await Promise.all([
+      this.hashFile(input.filePath),
+      readVideoMetadata(input.filePath),
+    ]);
 
     return {
       output: {
+        ...metadata,
         sourceVideoHash,
-        sizeBytes: stats.size,
         fileName: basename(input.filePath),
       },
       confidence: Confidence.of(100),

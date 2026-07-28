@@ -8,6 +8,11 @@ export interface ImportVideoInput {
   projectName?: string;
 }
 
+export interface ImportVideoResult {
+  project: Project;
+  intake: IntakeOutput;
+}
+
 /**
  * Caso de uso "Importar vídeo" — coordena o fluxo, nunca decide IA
  * (docs/00-ARCHITECTURE.md, seção 5, "Application Layer").
@@ -19,7 +24,7 @@ export class ImportVideoUseCase {
     private readonly generateId: () => string = randomUUID,
   ) {}
 
-  async execute(input: ImportVideoInput): Promise<Project> {
+  async execute(input: ImportVideoInput): Promise<ImportVideoResult> {
     const projectId = this.generateId();
 
     const intakeResult = await this.pie.run<IntakeInput, IntakeOutput>(
@@ -27,15 +32,24 @@ export class ImportVideoUseCase {
       { filePath: input.filePath },
       { projectId },
     );
+    const intake = intakeResult.output;
 
     const project = Project.create({
       id: projectId,
-      name: input.projectName ?? intakeResult.output.fileName,
+      name: input.projectName ?? intake.fileName,
       sourceVideoPath: input.filePath,
-      sourceVideoHash: intakeResult.output.sourceVideoHash,
+      sourceVideoHash: intake.sourceVideoHash,
+      video: {
+        durationMs: intake.durationMs,
+        width: intake.width,
+        height: intake.height,
+        fps: intake.fps,
+        codecName: intake.codecName,
+        hasAudio: intake.hasAudio,
+      },
     });
 
     await this.projectRepository.save(project);
-    return project;
+    return { project, intake };
   }
 }

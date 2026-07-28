@@ -6,7 +6,15 @@ export interface ProjectDTO {
   name: string;
   status: string;
   sourceVideoPath: string;
+  durationMs: number;
   createdAt: string;
+}
+
+export interface SceneDTO {
+  id: string;
+  startMs: number;
+  endMs: number;
+  roomType: string | null;
 }
 
 /**
@@ -24,23 +32,45 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
   });
 
   ipcMain.handle("projects:import", async (_event, filePath: string): Promise<ProjectDTO> => {
-    const project = await app.importVideo.execute({ filePath });
-    return toDto(project);
+    const { project } = await app.importAndAnalyzeVideo.execute({ filePath });
+    return toProjectDto(project);
   });
 
   ipcMain.handle("projects:list", async (): Promise<ProjectDTO[]> => {
     const projects = await app.listProjects.execute();
-    return projects.map(toDto);
+    return projects.map(toProjectDto);
+  });
+
+  ipcMain.handle("projects:getScenes", async (_event, projectId: string): Promise<SceneDTO[]> => {
+    const scenes = await app.sceneRepository.findByProject(projectId);
+    return scenes.map(toSceneDto);
   });
 }
 
-function toDto(project: { toProps(): { id: string; name: string; status: string; sourceVideoPath: string; createdAt: Date } }): ProjectDTO {
+function toProjectDto(project: {
+  toProps(): {
+    id: string;
+    name: string;
+    status: string;
+    sourceVideoPath: string;
+    video: { durationMs: number };
+    createdAt: Date;
+  };
+}): ProjectDTO {
   const props = project.toProps();
   return {
     id: props.id,
     name: props.name,
     status: props.status,
     sourceVideoPath: props.sourceVideoPath,
+    durationMs: props.video.durationMs,
     createdAt: props.createdAt.toISOString(),
   };
+}
+
+function toSceneDto(scene: {
+  toProps(): { id: string; startMs: number; endMs: number; roomType: string | null };
+}): SceneDTO {
+  const props = scene.toProps();
+  return { id: props.id, startMs: props.startMs, endMs: props.endMs, roomType: props.roomType };
 }

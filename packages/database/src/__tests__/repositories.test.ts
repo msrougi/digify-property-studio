@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
-import { DetectedObject, Project, Scene, Confidence } from "@digify/domain";
+import { DetectedObject, Project, Scene, Confidence, type VideoMetadataProps } from "@digify/domain";
 import { openDatabase } from "../connection.js";
 import { SqliteProjectRepository } from "../repositories/SqliteProjectRepository.js";
 import { SqliteSceneRepository } from "../repositories/SqliteSceneRepository.js";
 import { SqliteObjectRepository } from "../repositories/SqliteObjectRepository.js";
+
+const SAMPLE_VIDEO: VideoMetadataProps = {
+  durationMs: 45_000,
+  width: 1920,
+  height: 1080,
+  fps: 29.97,
+  codecName: "h264",
+  hasAudio: true,
+};
 
 describe("Sqlite repositories", () => {
   let db: Database.Database;
@@ -24,6 +33,7 @@ describe("Sqlite repositories", () => {
       name: "Cobertura Itaim",
       sourceVideoPath: "/videos/itaim.mp4",
       sourceVideoHash: "hash-1",
+      video: SAMPLE_VIDEO,
     });
 
     await repo.save(project);
@@ -34,6 +44,22 @@ describe("Sqlite repositories", () => {
     expect(found?.status).toBe("importing");
   });
 
+  it("persiste e recupera os metadados reais de vídeo (ffprobe)", async () => {
+    const repo = new SqliteProjectRepository(db);
+    const project = Project.create({
+      id: "p1",
+      name: "Cobertura Itaim",
+      sourceVideoPath: "/videos/itaim.mp4",
+      sourceVideoHash: "hash-1",
+      video: SAMPLE_VIDEO,
+    });
+
+    await repo.save(project);
+    const found = await repo.findById("p1");
+
+    expect(found?.toProps().video).toEqual(SAMPLE_VIDEO);
+  });
+
   it("atualiza status em save subsequente (upsert)", async () => {
     const repo = new SqliteProjectRepository(db);
     const project = Project.create({
@@ -41,6 +67,7 @@ describe("Sqlite repositories", () => {
       name: "Cobertura Itaim",
       sourceVideoPath: "/videos/itaim.mp4",
       sourceVideoHash: "hash-1",
+      video: SAMPLE_VIDEO,
     });
 
     await repo.save(project);
@@ -60,6 +87,7 @@ describe("Sqlite repositories", () => {
       name: "Cobertura Itaim",
       sourceVideoPath: "/videos/itaim.mp4",
       sourceVideoHash: "hash-1",
+      video: SAMPLE_VIDEO,
     });
     await projectRepo.save(project);
 
@@ -86,6 +114,7 @@ describe("Sqlite repositories", () => {
         name: "Cobertura Itaim",
         sourceVideoPath: "/videos/itaim.mp4",
         sourceVideoHash: "hash-1",
+        video: SAMPLE_VIDEO,
       }),
     );
     await sceneRepo.saveMany([Scene.create({ id: "s1", projectId: "p1", startMs: 0, endMs: 5000 })]);

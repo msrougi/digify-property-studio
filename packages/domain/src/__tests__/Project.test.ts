@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { Project } from "../entities/Project.js";
+import { Project, type VideoMetadataProps } from "../entities/Project.js";
+
+const SAMPLE_VIDEO: VideoMetadataProps = {
+  durationMs: 120_000,
+  width: 1920,
+  height: 1080,
+  fps: 30,
+  codecName: "h264",
+  hasAudio: true,
+};
 
 describe("Project", () => {
   it("nasce com status 'importing'", () => {
@@ -8,6 +17,7 @@ describe("Project", () => {
       name: "Apartamento Vila Mariana",
       sourceVideoPath: "/videos/vila-mariana.mp4",
       sourceVideoHash: "abc123",
+      video: SAMPLE_VIDEO,
     });
 
     expect(project.status).toBe("importing");
@@ -20,6 +30,7 @@ describe("Project", () => {
       name: "Apartamento Vila Mariana",
       sourceVideoPath: "/videos/vila-mariana.mp4",
       sourceVideoHash: "abc123",
+      video: SAMPLE_VIDEO,
       now,
     });
 
@@ -36,10 +47,23 @@ describe("Project", () => {
       name: "Apartamento Vila Mariana",
       sourceVideoPath: "/videos/vila-mariana.mp4",
       sourceVideoHash: "abc123",
+      video: SAMPLE_VIDEO,
     });
 
     const props = project.toProps();
     expect(props.sourceVideoPath).toBe("/videos/vila-mariana.mp4");
     expect(Object.keys(props)).not.toContain("videoBytes");
+  });
+
+  it("preserva os metadados reais extraídos pela capability intake", () => {
+    const project = Project.create({
+      id: "p1",
+      name: "Apartamento Vila Mariana",
+      sourceVideoPath: "/videos/vila-mariana.mp4",
+      sourceVideoHash: "abc123",
+      video: SAMPLE_VIDEO,
+    });
+
+    expect(project.toProps().video).toEqual(SAMPLE_VIDEO);
   });
 });

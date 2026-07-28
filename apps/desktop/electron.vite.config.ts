@@ -21,6 +21,15 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(__dirname, "src/preload/index.ts"),
+        // .cjs explícito: Electron carrega preload via require(), e como este
+        // pacote tem "type": "module" no package.json, um .js normal seria
+        // tratado como ESM e o require() falharia com ERR_REQUIRE_ESM — erro
+        // que só aparece no evento 'preload-error' do webContents, nunca no
+        // console padrão (diagnosticado nesta sessão via esse evento).
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].cjs",
+        },
       },
     },
   },

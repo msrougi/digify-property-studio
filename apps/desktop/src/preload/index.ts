@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ProjectDTO } from "../main/ipc.js";
+import type { ProjectDTO, SceneDTO } from "../main/ipc.js";
 
 /**
  * Única superfície exposta ao renderer — nunca expõe Node/fs diretamente
@@ -11,6 +11,8 @@ const digifyApi = {
   importVideo: (filePath: string): Promise<ProjectDTO> =>
     ipcRenderer.invoke("projects:import", filePath),
   listProjects: (): Promise<ProjectDTO[]> => ipcRenderer.invoke("projects:list"),
+  getScenes: (projectId: string): Promise<SceneDTO[]> =>
+    ipcRenderer.invoke("projects:getScenes", projectId),
 };
 
 contextBridge.exposeInMainWorld("digify", digifyApi);

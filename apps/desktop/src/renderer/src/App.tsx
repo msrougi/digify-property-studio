@@ -1,18 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
 import { ImportPanel } from "./components/ImportPanel.js";
 import { ProjectList } from "./components/ProjectList.js";
+import { Timeline } from "./components/Timeline.js";
 
 export function App(): JSX.Element {
   const [projects, setProjects] = useState<ProjectDTO[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [scenes, setScenes] = useState<SceneDTO[]>([]);
 
-  const refreshProjects = useCallback(async () => {
+  const refreshProjects = useCallback(async (): Promise<string | undefined> => {
     const list = await window.digify.listProjects();
     setProjects(list);
+    return list[0]?.id;
   }, []);
 
   useEffect(() => {
     void refreshProjects();
   }, [refreshProjects]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setScenes([]);
+      return;
+    }
+    void window.digify.getScenes(selectedProjectId).then(setScenes);
+  }, [selectedProjectId]);
+
+  async function handleImported(): Promise<void> {
+    const firstProjectId = await refreshProjects();
+    if (firstProjectId && !selectedProjectId) {
+      setSelectedProjectId(firstProjectId);
+    }
+  }
 
   return (
     <div className="app">
@@ -21,11 +40,22 @@ export function App(): JSX.Element {
         <p>Grave. Importe. A plataforma cuida do resto.</p>
       </header>
 
-      <ImportPanel onImported={refreshProjects} />
+      <ImportPanel onImported={handleImported} />
 
       <section>
-        <ProjectList projects={projects} />
+        <ProjectList
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          onSelect={setSelectedProjectId}
+        />
       </section>
+
+      {selectedProjectId && (
+        <section>
+          <h2 className="section-title">Timeline</h2>
+          <Timeline scenes={scenes} />
+        </section>
+      )}
     </div>
   );
 }

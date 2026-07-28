@@ -9,11 +9,15 @@ function createWindow(): void {
     height: 800,
     title: "Digify Property Studio",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  window.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error("Falha ao carregar preload", preloadPath, error);
   });
 
   const digify = bootstrap(join(app.getPath("userData"), "digify.sqlite"));

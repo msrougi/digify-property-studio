@@ -9,6 +9,12 @@ interface ProjectRow {
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
+  duration_ms: number;
+  width: number;
+  height: number;
+  fps: number;
+  codec_name: string;
+  has_audio: number;
 }
 
 export class SqliteProjectRepository implements ProjectRepository {
@@ -18,8 +24,16 @@ export class SqliteProjectRepository implements ProjectRepository {
     const props = project.toProps();
     this.db
       .prepare(
-        `INSERT INTO projects (id, name, source_video_path, source_video_hash, status, created_at, updated_at)
-         VALUES (@id, @name, @sourceVideoPath, @sourceVideoHash, @status, @createdAt, @updatedAt)
+        `INSERT INTO projects (
+           id, name, source_video_path, source_video_hash, status,
+           duration_ms, width, height, fps, codec_name, has_audio,
+           created_at, updated_at
+         )
+         VALUES (
+           @id, @name, @sourceVideoPath, @sourceVideoHash, @status,
+           @durationMs, @width, @height, @fps, @codecName, @hasAudio,
+           @createdAt, @updatedAt
+         )
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            status = excluded.status,
@@ -31,6 +45,12 @@ export class SqliteProjectRepository implements ProjectRepository {
         sourceVideoPath: props.sourceVideoPath,
         sourceVideoHash: props.sourceVideoHash,
         status: props.status,
+        durationMs: props.video.durationMs,
+        width: props.video.width,
+        height: props.video.height,
+        fps: props.video.fps,
+        codecName: props.video.codecName,
+        hasAudio: props.video.hasAudio ? 1 : 0,
         createdAt: props.createdAt.toISOString(),
         updatedAt: props.updatedAt.toISOString(),
       });
@@ -59,6 +79,14 @@ export class SqliteProjectRepository implements ProjectRepository {
       sourceVideoPath: row.source_video_path,
       sourceVideoHash: row.source_video_hash,
       status: row.status,
+      video: {
+        durationMs: row.duration_ms,
+        width: row.width,
+        height: row.height,
+        fps: row.fps,
+        codecName: row.codec_name,
+        hasAudio: row.has_audio === 1,
+      },
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     });

@@ -18,13 +18,13 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `intake` | Intake | Hash SHA-256 + metadados de arquivo (tamanho, nome). **Nota:** extração de codec/fps/HDR/resolução/duração via ffprobe ainda não implementada — placeholder documentado em `IntakeCapability.ts`. | shipped |
+| `intake` | Intake | Hash SHA-256 + metadados reais de vídeo via FFprobe (duração, resolução, fps, codec, áudio). **Nota:** HDR/orientação/bitrate ainda não extraídos. | shipped |
 
 ## Vision (somente leitura — nunca modifica mídia)
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `scene.detect` | Vision | Segmentação em cenas: cortes naturais, mudança de ambiente, cenas repetidas. | planned |
+| `scene.detect` | Vision | Segmentação real em cenas via filtro de scene-change do FFmpeg (determinístico, não probabilístico). Mudança de ambiente/repetição de cena ainda depende de `room.recognize` (planned). | shipped |
 | `room.recognize` | Vision | Classifica o ambiente (sala, cozinha, quarto, ...) e relevância comercial. | planned |
 | `object.detect` | Vision | Detecção + tracking de objetos com máscara, bounding box, categoria, confidence. | planned |
 | `property.score` | Vision | Nota 0–100 de potencial comercial (iluminação, estabilidade, composição, organização). | planned |

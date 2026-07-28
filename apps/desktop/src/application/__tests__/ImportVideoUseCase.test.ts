@@ -1,10 +1,11 @@
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { openDatabase, SqliteProjectRepository } from "@digify/database";
 import { CapabilityRegistry, EventBus, PropertyIntelligenceEngine } from "@digify/pie";
+import { generateTestVideo } from "../../test-support/generateTestVideo.js";
 import { IntakeCapability } from "../../infrastructure/capabilities/IntakeCapability.js";
 import { ImportVideoUseCase } from "../ImportVideoUseCase.js";
 import { ListProjectsUseCase } from "../ListProjectsUseCase.js";
@@ -13,11 +14,11 @@ describe("ImportVideoUseCase", () => {
   let db: Database.Database;
   let videoPath: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = openDatabase(":memory:");
     const dir = mkdtempSync(join(tmpdir(), "digify-import-"));
     videoPath = join(dir, "apartamento-vila-mariana.mp4");
-    writeFileSync(videoPath, "conteudo-de-video-fake-para-teste");
+    await generateTestVideo(videoPath, [{ color: "red", durationSec: 1 }]);
   });
 
   afterEach(() => {
@@ -35,13 +36,14 @@ describe("ImportVideoUseCase", () => {
     };
   }
 
-  it("importa um vídeo e persiste o projeto com status 'importing'", async () => {
+  it("importa um vídeo real e persiste o projeto com status 'importing'", async () => {
     const { importVideo, listProjects } = buildUseCase();
 
-    const project = await importVideo.execute({ filePath: videoPath });
+    const { project, intake } = await importVideo.execute({ filePath: videoPath });
 
     expect(project.status).toBe("importing");
     expect(project.toProps().sourceVideoHash).toHaveLength(64); // sha256 hex
+    expect(intake.durationMs).toBeGreaterThan(0);
 
     const projects = await listProjects.execute();
     expect(projects).toHaveLength(1);
@@ -51,7 +53,7 @@ describe("ImportVideoUseCase", () => {
   it("usa o nome do arquivo como nome do projeto quando não informado", async () => {
     const { importVideo } = buildUseCase();
 
-    const project = await importVideo.execute({ filePath: videoPath });
+    const { project } = await importVideo.execute({ filePath: videoPath });
 
     expect(project.toProps().name).toBe("apartamento-vila-mariana.mp4");
   });
@@ -59,7 +61,7 @@ describe("ImportVideoUseCase", () => {
   it("respeita o nome de projeto informado explicitamente", async () => {
     const { importVideo } = buildUseCase();
 
-    const project = await importVideo.execute({
+    const { project } = await importVideo.execute({
       filePath: videoPath,
       projectName: "Cobertura Duplex Itaim",
     });
@@ -67,13 +69,14 @@ describe("ImportVideoUseCase", () => {
     expect(project.toProps().name).toBe("Cobertura Duplex Itaim");
   });
 
-  it("nunca persiste bytes de vídeo — apenas caminho e hash", async () => {
+  it("nunca persiste bytes de vídeo — apenas caminho, hash e metadados reais", async () => {
     const { importVideo } = buildUseCase();
 
-    const project = await importVideo.execute({ filePath: videoPath });
+    const { project } = await importVideo.execute({ filePath: videoPath });
     const props = project.toProps();
 
     expect(props.sourceVideoPath).toBe(videoPath);
+    expect(props.video.width).toBe(64);
     expect(Object.keys(props)).not.toContain("videoBytes");
   });
 });
