@@ -179,19 +179,23 @@ capability):
 * **Rendering Engine** real (`RenderingEngine`) — executa a cadeia de filtros decidida via
   FFmpeg, produzindo um arquivo de vídeo novo (nunca sobrescreve o original — reversível por
   construção).
+* Capability `room.recognize` — **primeiro modelo de IA treinado do zero na plataforma**
+  (MobileNetV2 pré-treinado + classificador treinado por nós, 96,3% de acurácia em holdout
+  real). Ver `docs/ml/ROOM_CLASSIFIER.md` para dataset, metodologia e — importante —
+  **status de protótipo** (dataset de treino sem licença comercial clara).
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
-  Detect → persistência → Timeline → Aplicar melhorias (Lighting + Color) → vídeo renderizado
-  real** funcionando de ponta a ponta, verificado com lançamento real via `xvfb-run` +
-  Playwright/`_electron` controlando a janela de verdade e clicando os botões reais da UI
-  (não apenas build, nem chamadas diretas de API pulando a interface).
+  Detect → Room Recognize → persistência → Timeline (com ambiente real reconhecido) →
+  Aplicar melhorias (Lighting + Color) → vídeo renderizado real** funcionando de ponta a
+  ponta, verificado com lançamento real via `xvfb-run` + Playwright/`_electron` controlando a
+  janela de verdade e clicando os botões reais da UI (não apenas build, nem chamadas diretas
+  de API pulando a interface).
 
 Bugs de bundling só visíveis em execução real foram encontrados e corrigidos nestas etapas
 (registrados no changelog dos commits e em `docs/ENGINEERING_STANDARDS.md`, não repetidos
 aqui para evitar duplicação).
 
-**Ainda não implementado nesta fase**: Room/Object detection reais (dependem de modelo de
-visão computacional treinado — fora do que este ambiente de desenvolvimento consegue
-produzir; as capabilities já estão arquitetadas e aguardando o modelo), Perspective/Reflection
+**Ainda não implementado nesta fase**: Object detection real (mesma classe de solução de
+`room.recognize`, mas para objetos — próximo candidato natural), Perspective/Reflection
 (analyze+act), Home Staging, Export Manager (exportação final com todos os formatos/redes
 sociais), Player de vídeo, 5 dos 8 perfis de Color originais. Marketplace, Plugin SDK, Cloud
 (sync, colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo —

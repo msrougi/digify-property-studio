@@ -12,3 +12,11 @@ build/
 coverage/
 release/
 out/
+
+# tools/room-classifier: dataset e artefatos intermediários regeneráveis via
+# scripts/. Só os .onnx finais (copiados para apps/desktop/models/) são versionados.
+tools/room-classifier/.venv/
+tools/room-classifier/data/
+tools/room-classifier/models/*.onnx
+tools/room-classifier/models/*.joblib
+tools/room-classifier/models/*.npz

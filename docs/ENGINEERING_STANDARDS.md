@@ -15,9 +15,9 @@ Master Index original mas nunca entregues (ADR-0001, item B).
   segmentação de cena (`scene.detect`). Não são "IA": são processamento de sinal
   determinístico, por isso essas capabilities sempre reportam confidence 100.
 * **IA local (modelos treinados/ML):** `onnxruntime-node` (ver ADR-0001, item G). Nunca
-  Python no caminho crítico offline. Ainda não integrado — capabilities que dependem de
-  modelo treinado (`room.recognize`, `object.detect`, ...) seguem `planned` em
-  `docs/CAPABILITY_REGISTRY.md` até haver um modelo real para plugar.
+  Python no caminho crítico offline — Python é usado apenas offline, no pipeline de treino
+  em `tools/*/` (não roda no app). Primeira capability treinada: `room.recognize` (ver
+  `docs/ml/ROOM_CLASSIFIER.md`). `object.detect` e demais seguem `planned` até haver dataset.
 * **Testes:** Vitest (unit/integration, sempre com vídeos sintéticos reais gerados via
   FFmpeg — nunca arquivos fake/texto disfarçados de vídeo). Playwright + `_electron`
   (`require('playwright')._electron`) para E2E do shell Electron real via CDP.
@@ -80,6 +80,21 @@ característica normal de módulos nativos em apps Electron, não um bug — mas
 enganoso (`Module did not self-register` / `NODE_MODULE_VERSION` mismatch) se esquecido.
 Descoberto e documentado durante a verificação end-to-end real do vertical slice de import
 (lançamento do Electron via `xvfb-run` nesta mesma sessão).
+
+**Contraste:** `onnxruntime-node` **não** precisa desse rebuild — usa N-API (ABI estável
+entre versões de Node/Electron por design), diferente do `better-sqlite3` (bindings
+clássicos, ABI específico por versão). Confirmado empiricamente: mesmo binário funcionou sob
+Node puro (testes) e sob o Electron rebuildado para `better-sqlite3`, sem nenhuma ação extra.
+
+## onnxruntime-node: pacote precisa constar em `dependencies`
+
+`onnxruntime-node` carrega seu binário nativo (`onnxruntime_binding.node`) via require
+dinâmico. Se o pacote não estiver listado em `dependencies` no `package.json` (e não só
+instalado fisicamente em `node_modules`), o `externalizeDepsPlugin` do electron-vite não o
+exclui do bundle, e o Rollup tenta empacotar esse require dinâmico — falha em runtime com
+`Could not dynamically require "...onnxruntime_binding.node"`, mesma classe de erro do bug
+de bundling de pacotes do workspace já documentado acima. Sempre confirme com
+`grep onnxruntime package.json` depois de instalar.
 
 ## Testes — metas mínimas
 

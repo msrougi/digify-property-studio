@@ -20,7 +20,11 @@ function createWindow(): void {
     console.error("Falha ao carregar preload", preloadPath, error);
   });
 
-  const digify = bootstrap(app.getPath("userData"));
+  // Em dev/xvfb-run: apps/desktop/out/main/../../models = apps/desktop/models.
+  // Empacotamento final (electron-builder extraResources) é um passo futuro
+  // de packaging — não bloqueia esta fase de desenvolvimento.
+  const modelsDir = join(__dirname, "../../models");
+  const digify = bootstrap(app.getPath("userData"), modelsDir);
   registerIpcHandlers(digify, window);
 
   if (process.env["ELECTRON_RENDERER_URL"]) {

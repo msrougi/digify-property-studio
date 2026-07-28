@@ -24,8 +24,8 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `scene.detect` | Vision | Segmentação real em cenas via filtro de scene-change do FFmpeg (determinístico, não probabilístico). Mudança de ambiente/repetição de cena ainda depende de `room.recognize` (planned). | shipped |
-| `room.recognize` | Vision | Classifica o ambiente (sala, cozinha, quarto, ...) e relevância comercial. | planned |
+| `scene.detect` | Vision | Segmentação real em cenas via filtro de scene-change do FFmpeg (determinístico, não probabilístico). | shipped |
+| `room.recognize` | Vision | **Primeira capability com modelo de IA treinado de verdade** — MobileNetV2 (ImageNet) + classificador treinado por nós, 96,3% de acurácia em holdout real. Reconhece `bedroom`/`bathroom`/`kitchen`. Ver `docs/ml/ROOM_CLASSIFIER.md` — **protótipo, dataset de treino sem licença comercial clara, não usar em produção sem resolver isso**. Demais ~17 tipos de ambiente do catálogo original sem dado de treino ainda. | shipped (protótipo) |
 | `object.detect` | Vision | Detecção + tracking de objetos com máscara, bounding box, categoria, confidence. | planned |
 | `property.score` | Vision | Nota 0–100 de potencial comercial (iluminação, estabilidade, composição, organização). | planned |
 | `lighting.analyze` | Vision | Mede luminância média real via FFmpeg `signalstats`, classifica subexposto/normal/superexposto. Determinístico, não é modelo de IA — confidence sempre 100. Sombras/temperatura de cor ainda não medidas. | shipped |

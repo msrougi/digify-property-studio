@@ -1,0 +1,11 @@
+{
+  "train_accuracy": 0.9968847352024922,
+  "test_accuracy": 0.9626168224299065,
+  "train_samples": 1284,
+  "test_samples": 321,
+  "classes": [
+    "bathroom",
+    "bedroom",
+    "kitchen"
+  ]
+}
