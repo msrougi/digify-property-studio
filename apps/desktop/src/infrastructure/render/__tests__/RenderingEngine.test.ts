@@ -6,8 +6,12 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { generateTestVideo } from "../../../test-support/generateTestVideo.js";
 import { generateTiltedTestVideo } from "../../../test-support/generateTiltedTestVideo.js";
+import { generateVerticalTiltedTestVideo } from "../../../test-support/generateVerticalTiltedTestVideo.js";
 import { measureAverageLuma } from "../../ffmpeg/measureAverageLuma.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
+import { extractGrayscaleFrame } from "../../ffmpeg/extractGrayscaleFrame.js";
+import { detectSobelEdges } from "../../vision/sobelEdges.js";
+import { detectVerticalTilt } from "../../vision/houghVerticalDetect.js";
 import { FFMPEG_PATH } from "../../ffmpeg/paths.js";
 import { LightingAnalyzeCapability } from "../../capabilities/LightingAnalyzeCapability.js";
 import { LightingActCapability } from "../../capabilities/LightingActCapability.js";
@@ -171,6 +175,49 @@ describe("RenderingEngine", () => {
     // resolução mudaria a cada correção.
     expect(outputMeta.width).toBe(320);
     expect(outputMeta.height).toBe(240);
+  });
+
+  it("aplica de verdade a correção de linhas verticais (perspective+crop+scale) e o resultado é confirmado reto por uma nova detecção", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-vertical-"));
+    const sourcePath = join(dir, "vtilt-8.mp4");
+    const outputPath = join(dir, "endireitado.mp4");
+    await generateVerticalTiltedTestVideo(sourcePath, 8, { width: 320, height: 240 });
+
+    const analyze = await new PerspectiveAnalyzeCapability().execute({
+      filePath: sourcePath,
+      atMs: 500,
+      frameWidth: 320,
+      frameHeight: 240,
+    });
+    expect(analyze.output.verticalTiltDegrees).toBe(8);
+
+    const act = await new PerspectiveActCapability().execute({
+      ...analyze.output,
+      frameWidth: 320,
+      frameHeight: 240,
+    });
+    expect(act.output.needsCorrection).toBe(true);
+    expect(act.output.ffmpegFilter).toContain("perspective=");
+
+    const engine = new RenderingEngine();
+    await engine.render({
+      sourcePath,
+      outputPath,
+      filters: [act.output.ffmpegFilter as string],
+    });
+
+    const outputMeta = await readVideoMetadata(outputPath);
+    expect(outputMeta.width).toBe(320);
+    expect(outputMeta.height).toBe(240);
+
+    // Verificação em loop fechado: roda a MESMA detecção real no vídeo já
+    // corrigido -- se a correção funcionou de verdade, a linha vertical
+    // detectada agora deve estar (bem) próxima de 0°, não só "confiamos que
+    // a matemática está certa".
+    const correctedFrame = await extractGrayscaleFrame(outputPath, 500, 320, 240);
+    const correctedEdges = detectSobelEdges(correctedFrame.buffer, correctedFrame.width, correctedFrame.height);
+    const correctedResult = detectVerticalTilt(correctedEdges, correctedFrame.width, correctedFrame.height);
+    expect(Math.abs(correctedResult?.tiltDegrees ?? 999)).toBeLessThanOrEqual(1);
   });
 
   it("aplica de verdade uma tentativa de remoção (delogo) de objeto temporário detectado (fallback, sem modelo real)", async () => {

@@ -3,6 +3,7 @@ import type { Capability, CapabilityResult } from "@digify/pie";
 import { extractGrayscaleFrame } from "../ffmpeg/extractGrayscaleFrame.js";
 import { detectSobelEdges } from "../vision/sobelEdges.js";
 import { detectHorizonTilt } from "../vision/houghHorizonDetect.js";
+import { detectVerticalTilt } from "../vision/houghVerticalDetect.js";
 
 export interface PerspectiveAnalyzeInput {
   filePath: string;
@@ -17,15 +18,21 @@ export interface PerspectiveAnalyzeOutput {
   /** Quão dominante é a linha detectada (0-1) — usado para calibrar confidence. */
   peakStrength: number;
   edgePointCount: number;
+  /** Graus de desvio da linha vertical dominante em relação à vertical real (0 = reta). */
+  verticalTiltDegrees: number;
+  /** Quão dominante é a linha vertical detectada (0-1). */
+  verticalPeakStrength: number;
 }
 
 const MIN_EDGE_POINTS = 30;
 
 /**
  * Capability `perspective.analyze` — docs/CAPABILITY_REGISTRY.md, Vision
- * Layer. Detecção real de horizonte via Sobel (`../vision/sobelEdges.ts`) +
- * Transformada de Hough (`../vision/houghHorizonDetect.ts`) — geometria
- * clássica determinística, não um modelo de IA (mesma categoria de
+ * Layer. Detecção real de horizonte E linhas verticais (quinas de parede,
+ * batentes de porta) via Sobel (`../vision/sobelEdges.ts`) + Transformada de
+ * Hough (`../vision/houghHorizonDetect.ts` / `../vision/houghVerticalDetect.ts`,
+ * ambos wrappers do mesmo núcleo em `../vision/houghLineDetect.ts`) —
+ * geometria clássica determinística, não um modelo de IA (mesma categoria de
  * `lighting.analyze`/signalstats). Verificada contra vídeos sintéticos com
  * inclinação conhecida gerados via FFmpeg (`geq`) antes de integrar — ver
  * docs/vision/PERSPECTIVE.md.
@@ -48,12 +55,19 @@ export class PerspectiveAnalyzeCapability
     );
     const edges = detectSobelEdges(frame.buffer, frame.width, frame.height);
     const result = detectHorizonTilt(edges, frame.width, frame.height);
+    const verticalResult = detectVerticalTilt(edges, frame.width, frame.height);
 
     if (!result || result.edgePointCount < MIN_EDGE_POINTS) {
       // Cena sem bordas suficientes (ex.: parede lisa, frame muito escuro) —
       // não há sinal confiável, nunca inventamos uma inclinação.
       return {
-        output: { tiltDegrees: 0, peakStrength: 0, edgePointCount: edges.length },
+        output: {
+          tiltDegrees: 0,
+          peakStrength: 0,
+          edgePointCount: edges.length,
+          verticalTiltDegrees: 0,
+          verticalPeakStrength: 0,
+        },
         confidence: Confidence.of(20),
       };
     }
@@ -64,7 +78,11 @@ export class PerspectiveAnalyzeCapability
     const confidenceValue = Math.round(Math.min(100, result.peakStrength * 300));
 
     return {
-      output: result,
+      output: {
+        ...result,
+        verticalTiltDegrees: verticalResult?.tiltDegrees ?? 0,
+        verticalPeakStrength: verticalResult?.peakStrength ?? 0,
+      },
       confidence: Confidence.of(confidenceValue),
     };
   }
