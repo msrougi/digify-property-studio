@@ -4,6 +4,7 @@ import { ProjectList } from "./components/ProjectList.js";
 import { Timeline } from "./components/Timeline.js";
 import { RenderPanel } from "./components/RenderPanel.js";
 import { PropertyScorePanel } from "./components/PropertyScorePanel.js";
+import { VideoPlayer } from "./components/VideoPlayer.js";
 
 export function App(): JSX.Element {
   const [projects, setProjects] = useState<ProjectDTO[]>([]);
@@ -41,6 +42,8 @@ export function App(): JSX.Element {
     }
   }
 
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+
   return (
     <div className="app">
       <header className="app-header">
@@ -58,6 +61,13 @@ export function App(): JSX.Element {
         />
       </section>
 
+      {selectedProject && (
+        <section>
+          <h2 className="section-title">Vídeo original</h2>
+          <VideoPlayer filePath={selectedProject.sourceVideoPath} label={selectedProject.name} />
+        </section>
+      )}
+
       {selectedProjectId && (
         <section>
           <h2 className="section-title">Timeline</h2>
@@ -72,10 +82,10 @@ export function App(): JSX.Element {
         </section>
       )}
 
-      {selectedProjectId && (
+      {selectedProject && (
         <section>
           <h2 className="section-title">Melhorias</h2>
-          <RenderPanel projectId={selectedProjectId} />
+          <RenderPanel projectId={selectedProject.id} projectName={selectedProject.name} />
         </section>
       )}
     </div>

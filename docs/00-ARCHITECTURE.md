@@ -201,25 +201,38 @@ capability):
   para não afetar cenas seguintes onde a câmera já mudou de cômodo. Confidence fixo em 75
   ("confirm") — nunca auto-aplica. Ver `docs/ml/HOME_STAGING.md` para a limitação honesta de
   qualidade.
+* **Player de vídeo real** — esquema customizado `digify-media://` (`apps/desktop/src/shared/media.ts`,
+  registrado em `main/index.ts` via `protocol.registerSchemesAsPrivileged` + `protocol.handle`)
+  permite o `<video>` do renderer reproduzir arquivos locais sem o renderer nunca tocar em
+  `fs` diretamente (Least Privilege). Usado tanto para o vídeo original quanto para a prévia
+  renderizada.
+* **Export Manager real** (`ExportVideoUseCase`) — o usuário escolhe o destino via
+  `dialog.showSaveDialog` nativo e o vídeo já renderizado (MP4/H.264, produzido pelo
+  `RenderingEngine`) é copiado de verdade para lá; nunca sobrescreve o original nem o render
+  interno. Projeto transiciona para status `exported`.
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
   Detect → Room Recognize → Object Detect → Property Score → persistência → Timeline (com
-  ambiente real reconhecido) → Property Score exibido com sugestões → Aplicar melhorias
-  (Lighting + Color + Nitidez opcional + Home Staging opcional) → vídeo renderizado real**
+  ambiente real reconhecido) → Property Score exibido com sugestões → assistir o vídeo
+  original → Aplicar melhorias (Lighting + Color + Nitidez opcional + Home Staging opcional)
+  → assistir a prévia renderizada → Exportar vídeo final para onde o usuário escolher**
   funcionando de ponta a ponta, verificado com lançamento real via `xvfb-run` +
   Playwright/`_electron` controlando a janela de verdade e clicando os botões reais da UI
   (não apenas build, nem chamadas diretas de API pulando a interface).
 
 Bugs de bundling só visíveis em execução real foram encontrados e corrigidos nestas etapas
 (registrados no changelog dos commits e em `docs/ENGINEERING_STANDARDS.md`, não repetidos
-aqui para evitar duplicação).
+aqui para evitar duplicação) — incluindo um novo relacionado ao Player: `pathToFileURL` do
+Node não existe no `require("url")` polyfillado do preload sandboxado do Electron, só no
+processo main com Node completo.
 
-**Ainda não implementado nesta fase**: Perspective/Reflection (analyze+act), Export Manager
-(exportação final com todos os formatos/redes sociais), Player de vídeo, 5 dos 8 perfis de
-Color originais, inpainting generativo real para Home Staging (fica para a camada Cloud, que
-tem acesso de rede irrestrito e GPU). Marketplace, Plugin SDK, Cloud (sync, colaboração,
-render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já preparada
-para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um entra como
-uma nova capability registrada no PIE™, sem alterar o núcleo.
+**Ainda não implementado nesta fase**: Perspective/Reflection (analyze+act), exportação em
+múltiplos formatos/presets por rede social (a exportação atual entrega o MP4/H.264 já
+renderizado — suficiente para uso real, mas sem os presets específicos do catálogo original),
+5 dos 8 perfis de Color originais, inpainting generativo real para Home Staging (fica para a
+camada Cloud, que tem acesso de rede irrestrito e GPU). Marketplace, Plugin SDK, Cloud (sync,
+colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
+preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
+entra como uma nova capability registrada no PIE™, sem alterar o núcleo.
 
 ## 12. Referências
 

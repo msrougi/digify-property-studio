@@ -6,7 +6,9 @@ import type {
   PropertyScoreDTO,
   RenderPreviewOptions,
   RenderPreviewDTO,
+  ExportVideoDTO,
 } from "../main/ipc.js";
+import { toMediaUrl } from "../shared/media.js";
 
 /**
  * Única superfície exposta ao renderer — nunca expõe Node/fs diretamente
@@ -26,6 +28,15 @@ const digifyApi = {
     ipcRenderer.invoke("projects:getPropertyScore", projectId),
   renderPreview: (options: RenderPreviewOptions): Promise<RenderPreviewDTO> =>
     ipcRenderer.invoke("projects:renderPreview", options),
+  selectExportDestination: (suggestedName: string): Promise<string | null> =>
+    ipcRenderer.invoke("projects:selectExportDestination", suggestedName),
+  exportVideo: (
+    projectId: string,
+    renderedVideoPath: string,
+    destinationPath: string,
+  ): Promise<ExportVideoDTO> =>
+    ipcRenderer.invoke("projects:exportVideo", projectId, renderedVideoPath, destinationPath),
+  toMediaUrl,
 };
 
 contextBridge.exposeInMainWorld("digify", digifyApi);

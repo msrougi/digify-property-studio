@@ -47,6 +47,11 @@ export interface RenderPreviewDTO {
   appliedCorrections: string[];
 }
 
+export interface ExportVideoDTO {
+  destinationPath: string;
+  status: string;
+}
+
 /**
  * Toda comunicação renderer -> main passa por aqui, nunca acesso direto a
  * Node/filesystem a partir do renderer (docs/reference/original-docs/18 -
@@ -107,6 +112,34 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     "projects:renderPreview",
     async (_event, options: RenderPreviewOptions): Promise<RenderPreviewDTO> => {
       return app.renderPreview.execute(options);
+    },
+  );
+
+  ipcMain.handle(
+    "projects:selectExportDestination",
+    async (_event, suggestedName: string): Promise<string | null> => {
+      const result = await dialog.showSaveDialog(window, {
+        defaultPath: suggestedName,
+        filters: [{ name: "Vídeo MP4", extensions: ["mp4"] }],
+      });
+      return result.canceled ? null : (result.filePath ?? null);
+    },
+  );
+
+  ipcMain.handle(
+    "projects:exportVideo",
+    async (
+      _event,
+      projectId: string,
+      renderedVideoPath: string,
+      destinationPath: string,
+    ): Promise<ExportVideoDTO> => {
+      const { project, destinationPath: savedPath } = await app.exportVideo.execute({
+        projectId,
+        renderedVideoPath,
+        destinationPath,
+      });
+      return { destinationPath: savedPath, status: project.toProps().status };
     },
   );
 }

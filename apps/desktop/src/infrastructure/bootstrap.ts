@@ -15,6 +15,7 @@ import { PropertyScoreUseCase } from "../application/PropertyScoreUseCase.js";
 import { ImportAndAnalyzeVideoUseCase } from "../application/ImportAndAnalyzeVideoUseCase.js";
 import { ListProjectsUseCase } from "../application/ListProjectsUseCase.js";
 import { RenderPreviewUseCase } from "../application/RenderPreviewUseCase.js";
+import { ExportVideoUseCase } from "../application/ExportVideoUseCase.js";
 import { IntakeCapability } from "./capabilities/IntakeCapability.js";
 import { SceneDetectCapability } from "./capabilities/SceneDetectCapability.js";
 import { RoomRecognizeCapability } from "./capabilities/RoomRecognizeCapability.js";
@@ -87,6 +88,7 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
       sceneRepository,
       objectRepository,
     ),
+    exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,
     objectRepository,
     projectRepository,

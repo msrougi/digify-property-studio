@@ -58,6 +58,38 @@ fica `undefined`). `electron.vite.config.ts` força `output.format: "cjs"` +
 `preload-error` em `main/index.ts` permanentemente — é a única forma confiável de detectar
 essa classe de erro em produção.
 
+## Preload sandboxado (`sandbox: true`): só um subconjunto do Node
+
+Com `webPreferences.sandbox: true` (`main/index.ts`), o `require()` disponível dentro do
+preload é um polyfill restrito de poucos built-ins do Node — não é o Node completo. Duas
+pegadinhas encontradas construindo o Player de vídeo (`apps/desktop/src/shared/media.ts`):
+
+* Só o nome "clássico" do módulo funciona (`require("url")`), não a forma prefixada
+  `require("node:url")` — essa retorna algo sem os métodos esperados.
+* Mesmo com o nome certo, o polyfill de `url` não inclui `pathToFileURL`/`fileURLToPath`
+  (só o essencial tipo `URL`/`URLSearchParams`) — chamar `pathToFileURL` no preload lança
+  `... is not a function`, mas **só nesse contexto**: o mesmo código funciona normalmente no
+  processo `main`, que tem Node completo, o que torna esse bug enganoso de reproduzir fora do
+  app real.
+
+**Lição prática**: se uma função é chamada a partir do preload/renderer, prefira Web APIs
+padrão (`URL`, `URLSearchParams`, `encodeURIComponent`, `fetch`) em vez de assumir que
+qualquer coisa de `node:*` está disponível — mesmo built-ins "óbvios" podem estar incompletos
+no preload sandboxado. Só o processo `main` tem garantia de Node completo.
+
+## Esquemas customizados (`protocol.registerSchemesAsPrivileged`): host nunca vazio
+
+Para o Player de vídeo real (`digify-media://`, `apps/desktop/src/main/index.ts` +
+`apps/desktop/src/shared/media.ts`), a primeira tentativa usou uma URL com autoridade vazia
+(`digify-media:///caminho`), no padrão de `file:///caminho`. Isso quebra: `file:` é
+especial-cased pelo Chromium para aceitar host vazio, mas um esquema customizado marcado
+`standard: true` **não** recebe esse mesmo tratamento — o Chromium engole o primeiro
+segmento do path como se fosse o host (`digify-media:///home/user/x.mp4` vira host="home",
+path="/user/x.mp4", corrompendo o caminho; e se esse primeiro segmento tiver `%2F`
+codificado, falha inteiramente com `Failed to construct 'URL': Invalid URL`). **Fix**: usar
+um host fixo e não vazio (`digify-media://local-file/caminho/real`) — o path depois do host
+preserva as barras reais como separadores.
+
 ## Padrão de commit e revisão
 
 * Nunca implementar grandes mudanças de uma vez. Cada commit deve manter o projeto compilando

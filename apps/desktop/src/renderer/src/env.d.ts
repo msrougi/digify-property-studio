@@ -48,6 +48,11 @@ interface RenderPreviewDTO {
   appliedCorrections: string[];
 }
 
+interface ExportVideoDTO {
+  destinationPath: string;
+  status: string;
+}
+
 interface DigifyApi {
   selectVideoFile(): Promise<string | null>;
   importVideo(filePath: string): Promise<ProjectDTO>;
@@ -56,6 +61,13 @@ interface DigifyApi {
   getObjects(projectId: string): Promise<DetectedObjectDTO[]>;
   getPropertyScore(projectId: string): Promise<PropertyScoreDTO>;
   renderPreview(options: RenderPreviewOptions): Promise<RenderPreviewDTO>;
+  selectExportDestination(suggestedName: string): Promise<string | null>;
+  exportVideo(
+    projectId: string,
+    renderedVideoPath: string,
+    destinationPath: string,
+  ): Promise<ExportVideoDTO>;
+  toMediaUrl(absoluteFilePath: string): string;
 }
 
 interface Window {
