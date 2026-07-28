@@ -55,7 +55,19 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
   registry.register(new LightingActCapability());
   registry.register(new ColorActCapability());
   registry.register(new QualitySharpenCapability());
-  registry.register(new HomeStagingActCapability());
+
+  const rendersDir = join(userDataDir, "renders");
+  mkdirSync(rendersDir, { recursive: true });
+
+  // lama_inpainting.onnx (~196MB) não é versionado no git (acima do limite
+  // de 100MB do GitHub) — ver tools/inpainting/README.md. Quando ausente,
+  // HomeStagingActCapability cai automaticamente no fallback delogo.
+  const inpaintingPatchesDir = join(userDataDir, "inpainting-patches");
+  mkdirSync(inpaintingPatchesDir, { recursive: true });
+  registry.register(
+    new HomeStagingActCapability(join(modelsDir, "lama_inpainting.onnx"), inpaintingPatchesDir),
+  );
+
   registry.register(new PerspectiveAnalyzeCapability());
   registry.register(new PerspectiveActCapability());
 
@@ -67,9 +79,6 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
   const recognizeRooms = new RecognizeRoomsUseCase(pie, sceneRepository);
   const detectObjects = new DetectObjectsUseCase(pie, objectRepository);
   const computePropertyScore = new PropertyScoreUseCase(pie, sceneRepository, objectRepository);
-
-  const rendersDir = join(userDataDir, "renders");
-  mkdirSync(rendersDir, { recursive: true });
 
   return {
     db,

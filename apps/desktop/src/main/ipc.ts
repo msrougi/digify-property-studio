@@ -2,6 +2,7 @@ import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
 import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
+import { EXPORT_PRESETS, type ExportPresetId } from "../infrastructure/export/exportPresets.js";
 
 export interface ProjectDTO {
   id: string;
@@ -51,6 +52,15 @@ export interface RenderPreviewDTO {
 export interface ExportVideoDTO {
   destinationPath: string;
   status: string;
+}
+
+export interface ExportPresetDTO {
+  id: string;
+  label: string;
+  network: string;
+  width: number;
+  height: number;
+  description: string;
 }
 
 /**
@@ -134,15 +144,28 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
       projectId: string,
       renderedVideoPath: string,
       destinationPath: string,
+      presetId?: ExportPresetId,
     ): Promise<ExportVideoDTO> => {
       const { project, destinationPath: savedPath } = await app.exportVideo.execute({
         projectId,
         renderedVideoPath,
         destinationPath,
+        ...(presetId ? { presetId } : {}),
       });
       return { destinationPath: savedPath, status: project.toProps().status };
     },
   );
+
+  ipcMain.handle("projects:getExportPresets", (): ExportPresetDTO[] => {
+    return Object.values(EXPORT_PRESETS).map((preset) => ({
+      id: preset.id,
+      label: preset.label,
+      network: preset.network,
+      width: preset.width,
+      height: preset.height,
+      description: preset.description,
+    }));
+  });
 }
 
 function toProjectDto(project: {

@@ -269,3 +269,7 @@ body {
   gap: 8px;
   align-items: flex-start;
 }
+
+.render-panel__export > select {
+  margin-bottom: 4px;
+}

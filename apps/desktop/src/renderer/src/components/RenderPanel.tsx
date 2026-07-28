@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { VideoPlayer } from "./VideoPlayer.js";
 
 interface RenderPanelProps {
@@ -17,12 +17,15 @@ const PROFILE_LABEL: Record<ColorProfile, string> = {
   corporate: "Corporate",
 };
 
+const ORIGINAL_FORMAT_OPTION = "";
+
 /**
  * "Aplicar melhorias" — Lighting + Color reais via PIE™ + Rendering Engine.
  * Sempre informa o que foi alterado (docs/reference/original-docs/05 - User
  * Experience (UX).md, "Confiança"). Depois do render, o usuário assiste o
- * resultado (Player real) e pode exportar para onde quiser (Export Manager
- * real — cópia de verdade, `docs/00-ARCHITECTURE.md`, seção 11).
+ * resultado (Player real) e pode exportar para onde quiser, no formato
+ * original ou num preset real de rede social (`docs/00-ARCHITECTURE.md`,
+ * seção 11).
  */
 export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.Element {
   const [profile, setProfile] = useState<ColorProfile>("warm");
@@ -31,10 +34,16 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
   const [applyPerspective, setApplyPerspective] = useState(false);
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [result, setResult] = useState<RenderPreviewDTO | null>(null);
+  const [exportPresets, setExportPresets] = useState<ExportPresetDTO[]>([]);
+  const [exportPresetId, setExportPresetId] = useState<string>(ORIGINAL_FORMAT_OPTION);
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">(
     "idle",
   );
   const [exportedPath, setExportedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    void window.digify.getExportPresets().then(setExportPresets);
+  }, []);
 
   async function handleRender(): Promise<void> {
     setStatus("rendering");
@@ -67,6 +76,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
         projectId,
         result.outputPath,
         destinationPath,
+        exportPresetId || undefined,
       );
       setExportedPath(exportResult.destinationPath);
       setExportStatus("done");
@@ -106,7 +116,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
             onChange={(event) => setApplyHomeStaging(event.target.checked)}
             disabled={status === "rendering"}
           />
-          Remover itens temporários (experimental)
+          Remover itens temporários
         </label>
         <label className="render-panel__checkbox">
           <input
@@ -138,6 +148,19 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
           <VideoPlayer filePath={result.outputPath} label="Prévia renderizada" />
 
           <div className="render-panel__export">
+            <select
+              className="select"
+              value={exportPresetId}
+              onChange={(event) => setExportPresetId(event.target.value)}
+              disabled={exportStatus === "exporting"}
+            >
+              <option value={ORIGINAL_FORMAT_OPTION}>Formato original</option>
+              {exportPresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label} — {preset.width}x{preset.height}
+                </option>
+              ))}
+            </select>
             <button
               className="button-primary"
               onClick={handleExport}

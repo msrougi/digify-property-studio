@@ -62,6 +62,15 @@ interface ExportVideoDTO {
   status: string;
 }
 
+interface ExportPresetDTO {
+  id: string;
+  label: string;
+  network: string;
+  width: number;
+  height: number;
+  description: string;
+}
+
 interface DigifyApi {
   selectVideoFile(): Promise<string | null>;
   importVideo(filePath: string): Promise<ProjectDTO>;
@@ -75,7 +84,9 @@ interface DigifyApi {
     projectId: string,
     renderedVideoPath: string,
     destinationPath: string,
+    presetId?: string,
   ): Promise<ExportVideoDTO>;
+  getExportPresets(): Promise<ExportPresetDTO[]>;
   toMediaUrl(absoluteFilePath: string): string;
 }
 

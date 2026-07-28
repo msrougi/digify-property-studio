@@ -7,6 +7,7 @@ import type {
   RenderPreviewOptions,
   RenderPreviewDTO,
   ExportVideoDTO,
+  ExportPresetDTO,
 } from "../main/ipc.js";
 import { toMediaUrl } from "../shared/media.js";
 
@@ -34,8 +35,17 @@ const digifyApi = {
     projectId: string,
     renderedVideoPath: string,
     destinationPath: string,
+    presetId?: string,
   ): Promise<ExportVideoDTO> =>
-    ipcRenderer.invoke("projects:exportVideo", projectId, renderedVideoPath, destinationPath),
+    ipcRenderer.invoke(
+      "projects:exportVideo",
+      projectId,
+      renderedVideoPath,
+      destinationPath,
+      presetId,
+    ),
+  getExportPresets: (): Promise<ExportPresetDTO[]> =>
+    ipcRenderer.invoke("projects:getExportPresets"),
   toMediaUrl,
 };
 

@@ -24,3 +24,12 @@ tools/room-classifier/models/*.npz
 # tools/object-detector: cópia local do modelo usada só para verify_yolox.py
 # (o .onnx final versionado é apps/desktop/models/yolox_nano.onnx).
 tools/object-detector/*.onnx
+
+# tools/inpainting: checkpoint TorchScript (~196MB) e o .onnx exportado
+# (~196MB) excedem o limite de 100MB por arquivo do GitHub — não versionados.
+# Rode tools/inpainting/README.md para gerar localmente. Sem o arquivo em
+# apps/desktop/models/lama_inpainting.onnx, HomeStagingActCapability cai no
+# fallback delogo automaticamente.
+tools/inpainting/.venv/
+tools/inpainting/models/
+apps/desktop/models/lama_inpainting.onnx

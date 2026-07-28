@@ -9,7 +9,7 @@ import {
   SqliteProjectRepository,
   SqliteSceneRepository,
 } from "@digify/database";
-import { Project } from "@digify/domain";
+import { DetectedObject, Project, Scene } from "@digify/domain";
 import { CapabilityRegistry, EventBus, PropertyIntelligenceEngine } from "@digify/pie";
 import { generateTestVideo } from "../../test-support/generateTestVideo.js";
 import { measureAverageLuma } from "../../infrastructure/ffmpeg/measureAverageLuma.js";
@@ -51,6 +51,19 @@ describe("RenderPreviewUseCase", () => {
 
     const sceneRepository = new SqliteSceneRepository(db);
     const objectRepository = new SqliteObjectRepository(db);
+
+    const scene = Scene.create({ id: "s1", projectId: "p1", startMs: 0, endMs: 1000 });
+    await sceneRepository.saveMany([scene]);
+    await objectRepository.saveMany([
+      DetectedObject.create({
+        id: "o1",
+        sceneId: "s1",
+        category: "temporary",
+        boundingBox: { x: 5, y: 5, width: 10, height: 10 },
+        confidence: 90,
+      }),
+    ]);
+
     const registry = new CapabilityRegistry();
     registry.register(new LightingAnalyzeCapability());
     registry.register(new LightingActCapability());
@@ -76,8 +89,9 @@ describe("RenderPreviewUseCase", () => {
     });
 
     expect(result.outputPath).toBe(join(dir, "p1.mp4"));
-    // lighting + color + sharpen + home staging (sem objetos temporários, mas ainda reporta a decisão)
+    // lighting + color + sharpen + home staging (1 cena com 1 objeto temporário real)
     expect(result.appliedCorrections).toHaveLength(4);
+    expect(result.appliedCorrections.some((c) => c.includes("item"))).toBe(true);
 
     const lumaAfter = await measureAverageLuma(result.outputPath);
     expect(lumaAfter).toBeGreaterThan(50); // era ~16 (preto), corrigido para cima

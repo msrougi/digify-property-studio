@@ -1,5 +1,7 @@
 import { copyFile } from "node:fs/promises";
 import { DomainError, type Project, type ProjectRepository } from "@digify/domain";
+import { EXPORT_PRESETS, type ExportPresetId } from "../infrastructure/export/exportPresets.js";
+import { renderExportPreset } from "../infrastructure/export/renderExportPreset.js";
 
 export interface ExportVideoInput {
   projectId: string;
@@ -7,6 +9,8 @@ export interface ExportVideoInput {
   renderedVideoPath: string;
   /** Caminho escolhido pelo usuário (dialog.showSaveDialog no main process). */
   destinationPath: string;
+  /** Sem preset, exporta o vídeo já renderizado tal como está (cópia real). Com preset, gera a variante real pro formato/rede escolhido. */
+  presetId?: ExportPresetId;
 }
 
 export interface ExportVideoResult {
@@ -31,7 +35,15 @@ export class ExportVideoUseCase {
       throw new DomainError(`Projeto não encontrado: ${input.projectId}`, "PROJECT_NOT_FOUND");
     }
 
-    await copyFile(input.renderedVideoPath, input.destinationPath);
+    if (input.presetId) {
+      const preset = EXPORT_PRESETS[input.presetId];
+      if (!preset) {
+        throw new DomainError(`Preset de exportação desconhecido: ${input.presetId}`, "UNKNOWN_EXPORT_PRESET");
+      }
+      await renderExportPreset(input.renderedVideoPath, input.destinationPath, preset);
+    } else {
+      await copyFile(input.renderedVideoPath, input.destinationPath);
+    }
 
     project.transitionTo("exported");
     await this.projectRepository.save(project);

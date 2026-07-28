@@ -194,23 +194,29 @@ capability):
   inventa sinais sem medição real por trás (composição/estabilidade ficam `planned`).
 * Capability `quality.sharpen` — realce de nitidez real via filtro `unsharp` do FFmpeg.
   Real-ESRGAN foi avaliado e adiado para a futura camada Cloud/GPU — ver `docs/ml/QUALITY.md`.
-* Capability `home_staging.act` — combina detecção real (`object.detect`) com tentativa de
-  remoção via filtro `delogo` do FFmpeg (interpolação de vizinhança, não é inpainting
-  generativo — pesquisamos ativamente LaMa/Moebius/MI-GAN/IOPaint, todos hospedados apenas em
-  Hugging Face/Google Drive, inacessíveis neste ambiente de desenvolvimento). Filtros
-  restritos à janela de tempo da cena onde o objeto foi detectado (`enable='between(t,...)'`),
-  para não afetar cenas seguintes onde a câmera já mudou de cômodo. Confidence fixo em 75
-  ("confirm") — nunca auto-aplica. Ver `docs/ml/HOME_STAGING.md` para a limitação honesta de
-  qualidade.
+* Capability `home_staging.act` — combina detecção real (`object.detect`) com **inpainting
+  generativo real** via LaMa (Apache 2.0): checkpoint TorchScript baixado do GitHub Releases
+  (`Sanster/models`, não Hugging Face/Google Drive como os demais candidatos pesquisados),
+  convertido para ONNX (`torch.jit.load` → `TS2EPConverter` → exportador dynamo, contornando
+  um bug real do ONNX Runtime nos nós DFT com `graphOptimizationLevel: 'disabled'`) e verificado
+  numericamente contra o TorchScript original. `RenderingEngine` ganhou suporte a overlay de
+  imagem estática com janela de tempo (`enable='between(t,...)'`) pra compor o patch gerado
+  sobre o vídeo. Cai no fallback clássico `delogo` quando o modelo (~196MB, não versionado no
+  git) não está disponível localmente. Confidence fixo em 75 ("confirm") — nunca auto-aplica.
+  Ver `docs/ml/HOME_STAGING.md` e `tools/inpainting/README.md`.
 * **Player de vídeo real** — esquema customizado `digify-media://` (`apps/desktop/src/shared/media.ts`,
   registrado em `main/index.ts` via `protocol.registerSchemesAsPrivileged` + `protocol.handle`)
   permite o `<video>` do renderer reproduzir arquivos locais sem o renderer nunca tocar em
   `fs` diretamente (Least Privilege). Usado tanto para o vídeo original quanto para a prévia
   renderizada.
 * **Export Manager real** (`ExportVideoUseCase`) — o usuário escolhe o destino via
-  `dialog.showSaveDialog` nativo e o vídeo já renderizado (MP4/H.264, produzido pelo
-  `RenderingEngine`) é copiado de verdade para lá; nunca sobrescreve o original nem o render
-  interno. Projeto transiciona para status `exported`.
+  `dialog.showSaveDialog` nativo. Sem preset, o vídeo já renderizado (MP4/H.264, produzido
+  pelo `RenderingEngine`) é copiado de verdade para lá; com um preset de rede social
+  (`exportPresets.ts` — Instagram Feed/Reels/Stories, TikTok, YouTube/Shorts, Facebook Feed,
+  dimensões e bitrates reais publicados por cada rede), gera de verdade a variante
+  redimensionada via FFmpeg (`renderExportPreset.ts` — preenche o quadro alvo cobrindo e
+  recortando o excesso, sem distorcer). Nunca sobrescreve o original nem o render interno.
+  Projeto transiciona para status `exported`.
 * Capabilities `perspective.analyze` + `perspective.act` — detecção real de inclinação de
   horizonte via Sobel + Transformada de Hough (geometria clássica determinística, não IA) e
   correção via rotação + recorte pela maior área sem cantos pretos + reescala. Verificado com
@@ -223,7 +229,8 @@ capability):
   ambiente real reconhecido) → Property Score exibido com sugestões → assistir o vídeo
   original → Aplicar melhorias (Lighting + Color + Nitidez opcional + Home Staging opcional +
   Nivelamento de horizonte opcional) → assistir a prévia renderizada → Exportar vídeo final
-  para onde o usuário escolher** funcionando de ponta a ponta, verificado com lançamento real
+  (formato original ou preset de rede social) para onde o usuário escolher** funcionando de
+  ponta a ponta, verificado com lançamento real
   via `xvfb-run` + Playwright/`_electron` controlando a janela de verdade e clicando os
   botões reais da UI (não apenas build, nem chamadas diretas de API pulando a interface).
 
@@ -239,11 +246,8 @@ disponível: todo modelo com a classe "espelho/vidro" certa hospeda pesos fora d
 rede deste ambiente, e diferente do Home Staging não existe um fallback clássico honesto (uma
 heurística de "brilho = reflexo" seria só ruído, não uma versão limitada da capability — ver
 `docs/vision/REFLECTION.md`). Também faltam: linhas verticais/distorção de lente dentro de
-Perspective, exportação em múltiplos formatos/presets por rede social (a exportação atual
-entrega o MP4/H.264 já renderizado — suficiente para uso real, mas sem os presets específicos
-do catálogo original), inpainting generativo real para Home Staging (fica para a camada
-Cloud, que tem acesso de rede irrestrito e GPU). Os 8 perfis de Color do catálogo original já
-estão todos implementados. Marketplace, Plugin SDK, Cloud (sync,
+Perspective. Os 8 perfis de Color do catálogo original e o inpainting generativo real do Home
+Staging (LaMa) já estão implementados. Marketplace, Plugin SDK, Cloud (sync,
 colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
 preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
 entra como uma nova capability registrada no PIE™, sem alterar o núcleo.

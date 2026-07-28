@@ -30,7 +30,7 @@ import type {
   PerspectiveActInput,
   PerspectiveActOutput,
 } from "../infrastructure/capabilities/PerspectiveActCapability.js";
-import type { RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
+import type { ImageOverlay, RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
 
 export interface RenderPreviewInput {
   projectId: string;
@@ -94,6 +94,7 @@ export class RenderPreviewUseCase {
     );
 
     const appliedCorrections = [lightingAct.output.description, colorAct.output.description];
+    const overlays: ImageOverlay[] = [];
 
     if (input.applySharpen) {
       const sharpen = await this.pie.run<void, QualitySharpenOutput>(
@@ -106,32 +107,39 @@ export class RenderPreviewUseCase {
     }
 
     if (input.applyHomeStaging) {
+      const { width: frameWidth, height: frameHeight } = project.toProps().video;
       const scenes = await this.sceneRepository.findByProject(input.projectId);
-      const temporaryObjects: TemporaryObjectBox[] = [];
+
       for (const scene of scenes) {
         const sceneProps = scene.toProps();
         const objects = await this.objectRepository.findByScene(sceneProps.id);
-        for (const object of objects) {
-          const objectProps = object.toProps();
-          if (!objectProps.removable) continue;
-          temporaryObjects.push({
-            x: objectProps.boundingBox.x,
-            y: objectProps.boundingBox.y,
-            width: objectProps.boundingBox.width,
-            height: objectProps.boundingBox.height,
+        const temporaryObjects: TemporaryObjectBox[] = objects
+          .filter((object) => object.toProps().removable)
+          .map((object) => object.toProps().boundingBox);
+
+        if (temporaryObjects.length === 0) continue;
+
+        const staging = await this.pie.run<HomeStagingActInput, HomeStagingActOutput>(
+          "home_staging.act",
+          {
+            filePath: sourcePath,
+            atMs: Math.round((sceneProps.startMs + sceneProps.endMs) / 2),
+            frameWidth,
+            frameHeight,
             sceneStartMs: sceneProps.startMs,
             sceneEndMs: sceneProps.endMs,
-          });
-        }
-      }
+            temporaryObjects,
+          },
+          { projectId: input.projectId },
+        );
 
-      const staging = await this.pie.run<HomeStagingActInput, HomeStagingActOutput>(
-        "home_staging.act",
-        { temporaryObjects },
-        { projectId: input.projectId },
-      );
-      filters.push(...staging.output.ffmpegFilters);
-      appliedCorrections.push(staging.output.description);
+        if (staging.output.overlay) {
+          overlays.push(staging.output.overlay);
+        } else {
+          filters.push(...staging.output.legacyFilters);
+        }
+        appliedCorrections.push(staging.output.description);
+      }
     }
 
     if (input.applyPerspective) {
@@ -173,6 +181,7 @@ export class RenderPreviewUseCase {
       sourcePath,
       outputPath,
       filters,
+      overlays,
     });
 
     return {
