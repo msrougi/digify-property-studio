@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import { generateTestVideo } from "../../../test-support/generateTestVideo.js";
 import { generateTiltedTestVideo } from "../../../test-support/generateTiltedTestVideo.js";
 import { generateVerticalTiltedTestVideo } from "../../../test-support/generateVerticalTiltedTestVideo.js";
+import { generateBarrelDistortedTestVideo } from "../../../test-support/generateBarrelDistortedTestVideo.js";
+import { detectHorizonTilt } from "../../vision/houghHorizonDetect.js";
 import { measureAverageLuma } from "../../ffmpeg/measureAverageLuma.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
 import { extractGrayscaleFrame } from "../../ffmpeg/extractGrayscaleFrame.js";
@@ -218,6 +220,53 @@ describe("RenderingEngine", () => {
     const correctedEdges = detectSobelEdges(correctedFrame.buffer, correctedFrame.width, correctedFrame.height);
     const correctedResult = detectVerticalTilt(correctedEdges, correctedFrame.width, correctedFrame.height);
     expect(Math.abs(correctedResult?.tiltDegrees ?? 999)).toBeLessThanOrEqual(1);
+  });
+
+  it("aplica de verdade a correção de distorção de lente grande angular (lenscorrection) e a linha reta fica mais nítida numa nova detecção", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-lens-"));
+    const sourcePath = join(dir, "barrel-030.mp4");
+    const outputPath = join(dir, "sem-distorcao.mp4");
+    await generateBarrelDistortedTestVideo(sourcePath, 0.3, { width: 640, height: 480 });
+
+    const analyze = await new PerspectiveAnalyzeCapability().execute({
+      filePath: sourcePath,
+      atMs: 500,
+      frameWidth: 640,
+      frameHeight: 480,
+    });
+    expect(analyze.output.lensDistortionK1).toBeLessThan(0);
+
+    const act = await new PerspectiveActCapability().execute({
+      ...analyze.output,
+      frameWidth: 640,
+      frameHeight: 480,
+    });
+    expect(act.output.needsCorrection).toBe(true);
+    expect(act.output.ffmpegFilter).toContain("lenscorrection=");
+
+    const engine = new RenderingEngine();
+    await engine.render({
+      sourcePath,
+      outputPath,
+      filters: [act.output.ffmpegFilter as string],
+    });
+
+    const outputMeta = await readVideoMetadata(outputPath);
+    expect(outputMeta.width).toBe(640);
+    expect(outputMeta.height).toBe(480);
+
+    // Verificação em loop fechado: roda a MESMA detecção real (Sobel+Hough)
+    // no vídeo já corrigido -- se a correção funcionou, a linha reta fica
+    // bem mais concentrada (peakStrength maior) do que na versão distorcida.
+    const distortedFrame = await extractGrayscaleFrame(sourcePath, 500, 640, 480);
+    const distortedEdges = detectSobelEdges(distortedFrame.buffer, distortedFrame.width, distortedFrame.height);
+    const distortedPeak = detectHorizonTilt(distortedEdges, distortedFrame.width, distortedFrame.height)?.peakStrength ?? 0;
+
+    const correctedFrame = await extractGrayscaleFrame(outputPath, 500, 640, 480);
+    const correctedEdges = detectSobelEdges(correctedFrame.buffer, correctedFrame.width, correctedFrame.height);
+    const correctedPeak = detectHorizonTilt(correctedEdges, correctedFrame.width, correctedFrame.height)?.peakStrength ?? 0;
+
+    expect(correctedPeak).toBeGreaterThan(distortedPeak);
   });
 
   it("aplica de verdade uma tentativa de remoção (delogo) de objeto temporário detectado (fallback, sem modelo real)", async () => {

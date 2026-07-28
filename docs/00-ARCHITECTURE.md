@@ -218,19 +218,24 @@ capability):
   recortando o excesso, sem distorcer). Nunca sobrescreve o original nem o render interno.
   Projeto transiciona para status `exported`.
 * Capabilities `perspective.analyze` + `perspective.act` — detecção real de inclinação de
-  horizonte **e de linhas verticais** (quinas de parede, batentes de porta) via Sobel +
-  Transformada de Hough (geometria clássica determinística, não IA — núcleo genérico
-  `detectDominantLineTilt` reutilizado pelos dois wrappers), com correções independentes:
-  horizonte via rotação + recorte pela maior área sem cantos pretos + reescala; linhas
-  verticais via cisalhamento horizontal real (filtro `perspective` do FFmpeg, deslocando a
-  amostragem do topo em relação à base) + recorte seguro + reescala. Verificado com vídeos
-  sintéticos de ângulo conhecido gerados via FFmpeg (horizonte: 0°, 10°, -20°; verticais: 0°,
-  8°, -12°, todos recuperados com exatidão), a fórmula de recorte de horizonte conferida contra
-  um resultado geométrico conhecido (quadrado 45° → lado/√2), e a correção de verticais
-  verificada em loop fechado (aplica sobre inclinação conhecida, roda a mesma detecção de novo
-  no resultado, confirma ~0°) além de ponta a ponta pela UI real do Electron. Ver
-  `docs/vision/PERSPECTIVE.md` — distorção de lente grande angular (barril/pincushion) segue
-  fora do escopo.
+  horizonte, **linhas verticais** (quinas de parede, batentes de porta) e **distorção de lente
+  grande angular (barril)**, via Sobel + Transformada de Hough (geometria clássica
+  determinística, não IA — núcleo genérico `detectDominantLineTilt` reutilizado pelos dois
+  wrappers de horizonte/vertical) mais uma busca real de `k1` sobre o filtro `lenscorrection`
+  do próprio FFmpeg (`detectLensDistortion.ts` — testa candidatos aplicando a correção de
+  verdade num frame e mede se a linha reta dominante fica mais concentrada, sem depender de
+  reimplementar a fórmula geométrica do filtro). Três correções independentes, lente sempre
+  primeiro na cadeia: horizonte via rotação + recorte pela maior área sem cantos pretos +
+  reescala; linhas verticais via cisalhamento horizontal real (filtro `perspective` do FFmpeg)
+  + recorte seguro + reescala; lente via `lenscorrection` direto (sem recorte — verificado que
+  corrigir barril com `k1` negativo nunca deixa cantos pretos). Verificado com vídeos
+  sintéticos de ângulo/distorção conhecidos gerados via FFmpeg (horizonte: 0°, 10°, -20°;
+  verticais: 0°, 8°, -12°; lente: `k1Forward` 0.20 e 0.30, todos recuperados/corrigidos com
+  sucesso), a fórmula de recorte de horizonte conferida contra um resultado geométrico
+  conhecido (quadrado 45° → lado/√2), a correção de verticais e a de lente verificadas em loop
+  fechado (aplica sobre distorção/inclinação conhecida, roda a mesma detecção de novo no
+  resultado, confirma melhora real) além de ponta a ponta pela UI real do Electron. Ver
+  `docs/vision/PERSPECTIVE.md`.
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
   Detect → Room Recognize → Object Detect → Property Score → persistência → Timeline (com
   ambiente real reconhecido) → Property Score exibido com sugestões → assistir o vídeo
@@ -254,10 +259,9 @@ SAM2-UNet); o único candidato com pesos hospedados de forma acessível neste am
 ground truth sintético — reprovou (piora a imagem em vez de melhorar, autor já avisa que é
 WIP). Diferente do Home Staging não existe um fallback clássico honesto (uma heurística de
 "brilho = reflexo" seria só ruído, não uma versão limitada da capability — ver
-`docs/vision/REFLECTION.md`). Também falta: distorção de lente grande angular
-(barril/pincushion) dentro de Perspective — horizonte e linhas verticais já corrigidos de
-verdade. Os 8 perfis de Color do catálogo original e o inpainting generativo real do Home
-Staging (LaMa) já estão implementados. Marketplace, Plugin SDK, Cloud (sync,
+`docs/vision/REFLECTION.md`). Perspective (horizonte + linhas verticais + distorção de lente
+grande angular), os 8 perfis de Color do catálogo original e o inpainting generativo real do
+Home Staging (LaMa) já estão implementados. Marketplace, Plugin SDK, Cloud (sync,
 colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
 preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
 entra como uma nova capability registrada no PIE™, sem alterar o núcleo.
