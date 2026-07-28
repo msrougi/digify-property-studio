@@ -10,6 +10,11 @@ const PROFILE_LABEL: Record<ColorProfile, string> = {
   warm: "Warm",
   minimal: "Minimal",
   luxury: "Luxury",
+  modern: "Modern",
+  industrial: "Industrial",
+  beach: "Beach",
+  scandinavian: "Scandinavian",
+  corporate: "Corporate",
 };
 
 /**
@@ -23,6 +28,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
   const [profile, setProfile] = useState<ColorProfile>("warm");
   const [applySharpen, setApplySharpen] = useState(false);
   const [applyHomeStaging, setApplyHomeStaging] = useState(false);
+  const [applyPerspective, setApplyPerspective] = useState(false);
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [result, setResult] = useState<RenderPreviewDTO | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">(
@@ -40,6 +46,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
         colorProfile: profile,
         applySharpen,
         applyHomeStaging,
+        applyPerspective,
       });
       setResult(renderResult);
       setStatus("done");
@@ -100,6 +107,15 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
             disabled={status === "rendering"}
           />
           Remover itens temporários (experimental)
+        </label>
+        <label className="render-panel__checkbox">
+          <input
+            type="checkbox"
+            checked={applyPerspective}
+            onChange={(event) => setApplyPerspective(event.target.checked)}
+            disabled={status === "rendering"}
+          />
+          Nivelar horizonte
         </label>
         <button className="button-primary" onClick={handleRender} disabled={status === "rendering"}>
           {status === "rendering" ? "Aplicando…" : "Aplicar melhorias"}

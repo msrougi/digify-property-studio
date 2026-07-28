@@ -3,13 +3,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { generateTestVideo } from "../../../test-support/generateTestVideo.js";
+import { generateTiltedTestVideo } from "../../../test-support/generateTiltedTestVideo.js";
 import { measureAverageLuma } from "../../ffmpeg/measureAverageLuma.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
 import { LightingAnalyzeCapability } from "../../capabilities/LightingAnalyzeCapability.js";
 import { LightingActCapability } from "../../capabilities/LightingActCapability.js";
 import { QualitySharpenCapability } from "../../capabilities/QualitySharpenCapability.js";
 import { HomeStagingActCapability } from "../../capabilities/HomeStagingActCapability.js";
+import { ColorActCapability, type ColorProfile } from "../../capabilities/ColorActCapability.js";
+import { PerspectiveAnalyzeCapability } from "../../capabilities/PerspectiveAnalyzeCapability.js";
+import { PerspectiveActCapability } from "../../capabilities/PerspectiveActCapability.js";
 import { RenderingEngine } from "../RenderingEngine.js";
+
+const ALL_COLOR_PROFILES: ColorProfile[] = [
+  "warm",
+  "minimal",
+  "luxury",
+  "modern",
+  "industrial",
+  "beach",
+  "scandinavian",
+  "corporate",
+];
 
 describe("RenderingEngine", () => {
   it("aplica a correção de brilho decidida e o vídeo de saída fica mensuravelmente mais claro", async () => {
@@ -83,6 +98,59 @@ describe("RenderingEngine", () => {
 
     const outputMeta = await readVideoMetadata(outputPath);
     expect(outputMeta.durationMs).toBeGreaterThan(0);
+  });
+
+  it.each(ALL_COLOR_PROFILES)(
+    "aplica o filtro real do perfil de cor '%s' sem erro, produzindo um vídeo válido",
+    async (profile) => {
+      const dir = mkdtempSync(join(tmpdir(), `digify-render-color-${profile}-`));
+      const sourcePath = join(dir, "original.mp4");
+      const outputPath = join(dir, "colorido.mp4");
+      await generateTestVideo(sourcePath, [{ color: "gray", durationSec: 1 }]);
+
+      const color = await new ColorActCapability().execute({ profile });
+      const engine = new RenderingEngine();
+      await engine.render({ sourcePath, outputPath, filters: [color.output.ffmpegFilter] });
+
+      const outputMeta = await readVideoMetadata(outputPath);
+      expect(outputMeta.durationMs).toBeGreaterThan(0);
+    },
+  );
+
+  it("aplica de verdade a correção de horizonte (rotate+crop+scale) sobre um vídeo com inclinação conhecida", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-perspective-"));
+    const sourcePath = join(dir, "tilt-10.mp4");
+    const outputPath = join(dir, "nivelado.mp4");
+    await generateTiltedTestVideo(sourcePath, 10, { width: 320, height: 240 });
+
+    const analyze = await new PerspectiveAnalyzeCapability().execute({
+      filePath: sourcePath,
+      atMs: 500,
+      frameWidth: 320,
+      frameHeight: 240,
+    });
+    expect(analyze.output.tiltDegrees).toBe(10);
+
+    const act = await new PerspectiveActCapability().execute({
+      ...analyze.output,
+      frameWidth: 320,
+      frameHeight: 240,
+    });
+    expect(act.output.needsCorrection).toBe(true);
+
+    const engine = new RenderingEngine();
+    await engine.render({
+      sourcePath,
+      outputPath,
+      filters: [act.output.ffmpegFilter as string],
+    });
+
+    const outputMeta = await readVideoMetadata(outputPath);
+    expect(outputMeta.durationMs).toBeGreaterThan(0);
+    // O filtro reescala de volta para o tamanho original — sem essa etapa a
+    // resolução mudaria a cada correção.
+    expect(outputMeta.width).toBe(320);
+    expect(outputMeta.height).toBe(240);
   });
 
   it("aplica de verdade uma tentativa de remoção (delogo) de objeto temporário detectado", async () => {

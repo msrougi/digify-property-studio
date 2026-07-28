@@ -174,8 +174,9 @@ capability):
 * Capability `lighting.analyze` — mede luminância real (FFmpeg `signalstats`), classifica
   subexposto/normal/superexposto.
 * Capabilities `lighting.act` e `color.act` — decidem correção de brilho e color grading
-  (perfis Warm/Minimal/Luxury) como filtros FFmpeg prontos para execução. Decidem, não
-  executam ("A IA decide. O Rendering Engine executa.").
+  (os 8 perfis do catálogo original: Warm, Minimal, Luxury, Modern, Industrial, Beach,
+  Scandinavian, Corporate) como filtros FFmpeg prontos para execução. Decidem, não executam
+  ("A IA decide. O Rendering Engine executa.").
 * **Rendering Engine** real (`RenderingEngine`) — executa a cadeia de filtros decidida via
   FFmpeg, produzindo um arquivo de vídeo novo (nunca sobrescreve o original — reversível por
   construção).
@@ -210,14 +211,21 @@ capability):
   `dialog.showSaveDialog` nativo e o vídeo já renderizado (MP4/H.264, produzido pelo
   `RenderingEngine`) é copiado de verdade para lá; nunca sobrescreve o original nem o render
   interno. Projeto transiciona para status `exported`.
+* Capabilities `perspective.analyze` + `perspective.act` — detecção real de inclinação de
+  horizonte via Sobel + Transformada de Hough (geometria clássica determinística, não IA) e
+  correção via rotação + recorte pela maior área sem cantos pretos + reescala. Verificado com
+  vídeos sintéticos de ângulo conhecido gerados via FFmpeg (0°, 10°, -20° recuperados com
+  exatidão) e a fórmula de recorte conferida contra um resultado geométrico conhecido
+  (quadrado 45° → lado/√2). Ver `docs/vision/PERSPECTIVE.md` — só horizonte por enquanto,
+  linhas verticais/distorção de lente ficam para depois.
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
   Detect → Room Recognize → Object Detect → Property Score → persistência → Timeline (com
   ambiente real reconhecido) → Property Score exibido com sugestões → assistir o vídeo
-  original → Aplicar melhorias (Lighting + Color + Nitidez opcional + Home Staging opcional)
-  → assistir a prévia renderizada → Exportar vídeo final para onde o usuário escolher**
-  funcionando de ponta a ponta, verificado com lançamento real via `xvfb-run` +
-  Playwright/`_electron` controlando a janela de verdade e clicando os botões reais da UI
-  (não apenas build, nem chamadas diretas de API pulando a interface).
+  original → Aplicar melhorias (Lighting + Color + Nitidez opcional + Home Staging opcional +
+  Nivelamento de horizonte opcional) → assistir a prévia renderizada → Exportar vídeo final
+  para onde o usuário escolher** funcionando de ponta a ponta, verificado com lançamento real
+  via `xvfb-run` + Playwright/`_electron` controlando a janela de verdade e clicando os
+  botões reais da UI (não apenas build, nem chamadas diretas de API pulando a interface).
 
 Bugs de bundling só visíveis em execução real foram encontrados e corrigidos nestas etapas
 (registrados no changelog dos commits e em `docs/ENGINEERING_STANDARDS.md`, não repetidos
@@ -225,11 +233,13 @@ aqui para evitar duplicação) — incluindo um novo relacionado ao Player: `pat
 Node não existe no `require("url")` polyfillado do preload sandboxado do Electron, só no
 processo main com Node completo.
 
-**Ainda não implementado nesta fase**: Perspective/Reflection (analyze+act), exportação em
-múltiplos formatos/presets por rede social (a exportação atual entrega o MP4/H.264 já
-renderizado — suficiente para uso real, mas sem os presets específicos do catálogo original),
-5 dos 8 perfis de Color originais, inpainting generativo real para Home Staging (fica para a
-camada Cloud, que tem acesso de rede irrestrito e GPU). Marketplace, Plugin SDK, Cloud (sync,
+**Ainda não implementado nesta fase**: Reflection (analyze+act — pesquisa de viabilidade em
+andamento, ver `docs/CAPABILITY_REGISTRY.md`), linhas verticais/distorção de lente dentro de
+Perspective, exportação em múltiplos formatos/presets por rede social (a exportação atual
+entrega o MP4/H.264 já renderizado — suficiente para uso real, mas sem os presets específicos
+do catálogo original), inpainting generativo real para Home Staging (fica para a camada
+Cloud, que tem acesso de rede irrestrito e GPU). Os 8 perfis de Color do catálogo original já
+estão todos implementados. Marketplace, Plugin SDK, Cloud (sync,
 colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
 preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
 entra como uma nova capability registrada no PIE™, sem alterar o núcleo.

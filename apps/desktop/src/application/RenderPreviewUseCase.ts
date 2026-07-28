@@ -22,6 +22,14 @@ import type {
   HomeStagingActOutput,
   TemporaryObjectBox,
 } from "../infrastructure/capabilities/HomeStagingActCapability.js";
+import type {
+  PerspectiveAnalyzeInput,
+  PerspectiveAnalyzeOutput,
+} from "../infrastructure/capabilities/PerspectiveAnalyzeCapability.js";
+import type {
+  PerspectiveActInput,
+  PerspectiveActOutput,
+} from "../infrastructure/capabilities/PerspectiveActCapability.js";
 import type { RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
 
 export interface RenderPreviewInput {
@@ -31,6 +39,8 @@ export interface RenderPreviewInput {
   applySharpen?: boolean;
   /** Aplicar tentativa de remoção de itens temporários (`home_staging.act`)? Padrão: não. */
   applyHomeStaging?: boolean;
+  /** Aplicar correção de horizonte (`perspective.analyze`+`perspective.act`)? Padrão: não. */
+  applyPerspective?: boolean;
 }
 
 export interface RenderPreviewResult {
@@ -122,6 +132,40 @@ export class RenderPreviewUseCase {
       );
       filters.push(...staging.output.ffmpegFilters);
       appliedCorrections.push(staging.output.description);
+    }
+
+    if (input.applyPerspective) {
+      const videoProps = project.toProps().video;
+      const midpointMs = Math.round(videoProps.durationMs / 2);
+
+      const perspectiveAnalyze = await this.pie.run<
+        PerspectiveAnalyzeInput,
+        PerspectiveAnalyzeOutput
+      >(
+        "perspective.analyze",
+        {
+          filePath: sourcePath,
+          atMs: midpointMs,
+          frameWidth: videoProps.width,
+          frameHeight: videoProps.height,
+        },
+        { projectId: input.projectId },
+      );
+
+      const perspectiveAct = await this.pie.run<PerspectiveActInput, PerspectiveActOutput>(
+        "perspective.act",
+        {
+          ...perspectiveAnalyze.output,
+          frameWidth: videoProps.width,
+          frameHeight: videoProps.height,
+        },
+        { projectId: input.projectId },
+      );
+
+      if (perspectiveAct.output.ffmpegFilter) {
+        filters.push(perspectiveAct.output.ffmpegFilter);
+      }
+      appliedCorrections.push(perspectiveAct.output.description);
     }
 
     const outputPath = join(this.rendersDir, `${input.projectId}.mp4`);

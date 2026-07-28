@@ -2,13 +2,21 @@ import { Confidence } from "@digify/domain";
 import type { Capability, CapabilityResult } from "@digify/pie";
 
 /**
- * Subconjunto implementado dos perfis documentados em
- * docs/reference/original-docs/09 - AI Color (dentro de 08 - AI Agents.md).
- * Os demais (Modern, Industrial, Beach, Scandinavian, Corporate) ficam para
- * quando houver validação visual real de cada um — melhor entregar 3 corretos
- * do que 8 arbitrários.
+ * Todos os 8 perfis documentados em docs/reference/original-docs/09 - AI Color
+ * (dentro de 08 - AI Agents.md). Os originais não especificam parâmetros
+ * exatos — só o nome/intenção de cada perfil — então cada filtro abaixo é uma
+ * tradução nossa da intenção estética em parâmetros reais de FFmpeg
+ * (`eq`/`colorbalance`), na mesma linha dos 3 primeiros (Warm/Minimal/Luxury).
  */
-export type ColorProfile = "warm" | "minimal" | "luxury";
+export type ColorProfile =
+  | "warm"
+  | "minimal"
+  | "luxury"
+  | "modern"
+  | "industrial"
+  | "beach"
+  | "scandinavian"
+  | "corporate";
 
 export interface ColorActInput {
   profile: ColorProfile;
@@ -31,6 +39,26 @@ const PROFILE_FILTERS: Record<ColorProfile, ColorActOutput> = {
   luxury: {
     ffmpegFilter: "eq=contrast=1.15:saturation=1.05,colorbalance=rs=0.02:bs=0.05",
     description: "Perfil Luxury — contraste elevado, tons levemente frios, sofisticado.",
+  },
+  modern: {
+    ffmpegFilter: "eq=contrast=1.12:saturation=0.95,colorbalance=rs=-0.03:bs=0.05",
+    description: "Perfil Modern — contraste nítido, tons levemente frios e neutros.",
+  },
+  industrial: {
+    ffmpegFilter: "eq=saturation=0.7:contrast=1.1,colorbalance=rs=-0.05:gs=0.02",
+    description: "Perfil Industrial — dessaturado, cinza-aço, contraste elevado.",
+  },
+  beach: {
+    ffmpegFilter: "eq=brightness=0.03:saturation=1.2,colorbalance=rs=0.08:gs=0.04:bs=-0.05",
+    description: "Perfil Beach — claro, ensolarado, saturação elevada.",
+  },
+  scandinavian: {
+    ffmpegFilter: "eq=brightness=0.04:saturation=0.8:contrast=0.98,colorbalance=bs=0.03",
+    description: "Perfil Scandinavian — claro, arejado, tons neutros e suaves.",
+  },
+  corporate: {
+    ffmpegFilter: "eq=saturation=0.9:contrast=1.08,colorbalance=rs=-0.02:bs=0.06",
+    description: "Perfil Corporate — neutro, profissional, leve tom frio.",
   },
 };
 

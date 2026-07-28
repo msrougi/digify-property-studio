@@ -40,6 +40,7 @@ export interface RenderPreviewOptions {
   colorProfile: ColorProfile;
   applySharpen?: boolean;
   applyHomeStaging?: boolean;
+  applyPerspective?: boolean;
 }
 
 export interface RenderPreviewDTO {

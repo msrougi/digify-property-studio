@@ -26,6 +26,8 @@ import { LightingActCapability } from "./capabilities/LightingActCapability.js";
 import { ColorActCapability } from "./capabilities/ColorActCapability.js";
 import { QualitySharpenCapability } from "./capabilities/QualitySharpenCapability.js";
 import { HomeStagingActCapability } from "./capabilities/HomeStagingActCapability.js";
+import { PerspectiveAnalyzeCapability } from "./capabilities/PerspectiveAnalyzeCapability.js";
+import { PerspectiveActCapability } from "./capabilities/PerspectiveActCapability.js";
 import { RenderingEngine } from "./render/RenderingEngine.js";
 
 /**
@@ -54,6 +56,8 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
   registry.register(new ColorActCapability());
   registry.register(new QualitySharpenCapability());
   registry.register(new HomeStagingActCapability());
+  registry.register(new PerspectiveAnalyzeCapability());
+  registry.register(new PerspectiveActCapability());
 
   const bus = new EventBus();
   const pie = new PropertyIntelligenceEngine(registry, bus);

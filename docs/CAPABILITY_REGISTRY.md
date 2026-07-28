@@ -29,7 +29,7 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 | `object.detect` | Vision | YOLOX-Nano (Apache 2.0), zero-shot em COCO (80 classes), sem tracking (roda por frame-cena, não por vídeo inteiro). Mapeia classes COCO para `structural`/`decorative`/`temporary`/`personal`/`luxury`. Ver `docs/ml/OBJECT_DETECTION.md`. | shipped |
 | `property.score` | Vision | Nota 0–100 determinística a partir de sinais já medidos (`lighting.analyze` + contagem de objetos temporários de `object.detect`) — sem estabilidade/composição ainda, por não terem sinal real por trás. | shipped |
 | `lighting.analyze` | Vision | Mede luminância média real via FFmpeg `signalstats`, classifica subexposto/normal/superexposto. Determinístico, não é modelo de IA — confidence sempre 100. Sombras/temperatura de cor ainda não medidas. | shipped |
-| `perspective.analyze` | Vision | Detecta horizonte, linhas verticais, distorção de lente. | planned |
+| `perspective.analyze` | Vision | Detecta inclinação real do horizonte via Sobel + Transformada de Hough (geometria clássica, não IA), verificado contra vídeos sintéticos com ângulo conhecido. Linhas verticais/distorção de lente ainda não implementadas. Ver `docs/vision/PERSPECTIVE.md`. | shipped (só horizonte) |
 | `reflection.analyze` | Vision | Detecta superfícies reflexivas e objetos indesejados refletidos (equipe/tripé). | planned |
 
 ## Production (modifica mídia — sempre reversível)
@@ -37,9 +37,9 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
 | `lighting.act` | Production | Decide a correção de brilho a partir de `lighting.analyze` (não executa — quem executa é o Rendering Engine). Nunca altera a atmosfera original além do necessário. | shipped |
-| `color.act` | Production | Decide o filtro de color grading para os perfis Warm/Minimal/Luxury. Demais perfis do catálogo original (Modern, Industrial, Beach, Scandinavian, Corporate) ainda não mapeados. | shipped (3 de 8 perfis) |
+| `color.act` | Production | Decide o filtro de color grading para os 8 perfis do catálogo original (Warm, Minimal, Luxury, Modern, Industrial, Beach, Scandinavian, Corporate). Os originais não especificam parâmetros exatos por perfil — cada filtro é uma tradução nossa da intenção estética em parâmetros reais de FFmpeg (`eq`/`colorbalance`). | shipped (8 de 8 perfis) |
 | `quality.sharpen` | Production | Realce de nitidez conservador via filtro `unsharp` do FFmpeg (processamento clássico, não é super-resolução por IA). Não estava no catálogo original — adicionado como resultado real e viável no lugar de Real-ESRGAN. Ver `docs/ml/QUALITY.md`. | shipped |
-| `perspective.act` | Production | Corrige horizonte/distorção com base em `perspective.analyze`. | planned |
+| `perspective.act` | Production | Nivela o horizonte via rotação + recorte pela maior área sem cantos pretos + reescala (`docs/vision/PERSPECTIVE.md`). Correção clampada em ±8°, confidence 75 ("confirm") — nunca auto-aplica. | shipped (só horizonte) |
 | `reflection.act` | Production | Remove objetos refletidos indesejados com base em `reflection.analyze`. | planned |
 | `home_staging.act` | Production | Detecção real (`object.detect`) + tentativa de remoção via filtro `delogo` do FFmpeg (interpolação da vizinhança, não é preenchimento generativo por IA — todos os modelos de inpainting avaliados só distribuem pesos via Hugging Face/Google Drive, inacessíveis neste ambiente). Filtros restritos à janela de tempo (`enable='between(t,...)'`) da cena em que o objeto foi detectado, para não borrar outras cenas. Confidence fixo em 75 ("confirm") — nunca auto-aplica. Ver `docs/ml/HOME_STAGING.md`. | shipped (limitação de qualidade conhecida) |
 | `decorator.act` | Production | Adiciona elementos decorativos discretos opcionais. | planned |

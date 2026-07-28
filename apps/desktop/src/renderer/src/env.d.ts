@@ -16,7 +16,15 @@ interface SceneDTO {
   roomType: string | null;
 }
 
-type ColorProfile = "warm" | "minimal" | "luxury";
+type ColorProfile =
+  | "warm"
+  | "minimal"
+  | "luxury"
+  | "modern"
+  | "industrial"
+  | "beach"
+  | "scandinavian"
+  | "corporate";
 
 type ObjectCategory = "structural" | "decorative" | "temporary" | "personal" | "luxury";
 
@@ -41,6 +49,7 @@ interface RenderPreviewOptions {
   colorProfile: ColorProfile;
   applySharpen?: boolean;
   applyHomeStaging?: boolean;
+  applyPerspective?: boolean;
 }
 
 interface RenderPreviewDTO {
