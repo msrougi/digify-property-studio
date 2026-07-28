@@ -17,13 +17,20 @@ const PROFILE_LABEL: Record<ColorProfile, string> = {
  */
 export function RenderPanel({ projectId }: RenderPanelProps): JSX.Element {
   const [profile, setProfile] = useState<ColorProfile>("warm");
+  const [applySharpen, setApplySharpen] = useState(false);
+  const [applyHomeStaging, setApplyHomeStaging] = useState(false);
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [result, setResult] = useState<RenderPreviewDTO | null>(null);
 
   async function handleRender(): Promise<void> {
     setStatus("rendering");
     try {
-      const renderResult = await window.digify.renderPreview(projectId, profile);
+      const renderResult = await window.digify.renderPreview({
+        projectId,
+        colorProfile: profile,
+        applySharpen,
+        applyHomeStaging,
+      });
       setResult(renderResult);
       setStatus("done");
     } catch {
@@ -46,6 +53,24 @@ export function RenderPanel({ projectId }: RenderPanelProps): JSX.Element {
             </option>
           ))}
         </select>
+        <label className="render-panel__checkbox">
+          <input
+            type="checkbox"
+            checked={applySharpen}
+            onChange={(event) => setApplySharpen(event.target.checked)}
+            disabled={status === "rendering"}
+          />
+          Nitidez
+        </label>
+        <label className="render-panel__checkbox">
+          <input
+            type="checkbox"
+            checked={applyHomeStaging}
+            onChange={(event) => setApplyHomeStaging(event.target.checked)}
+            disabled={status === "rendering"}
+          />
+          Remover itens temporários (experimental)
+        </label>
         <button className="button-primary" onClick={handleRender} disabled={status === "rendering"}>
           {status === "rendering" ? "Aplicando…" : "Aplicar melhorias"}
         </button>

@@ -25,4 +25,19 @@ describe("DetectedObject", () => {
 
     expect(clothes.toProps().removable).toBe(true);
   });
+
+  it.each(["decorative", "personal", "luxury"] as const)(
+    "móveis/eletrodomésticos fixos (%s) nunca são removíveis, mesmo não sendo 'structural'",
+    (category) => {
+      const furniture = DetectedObject.create({
+        id: "o3",
+        sceneId: "s1",
+        category,
+        boundingBox: { x: 0, y: 0, width: 50, height: 50 },
+        confidence: 90,
+      });
+
+      expect(furniture.toProps().removable).toBe(false);
+    },
+  );
 });

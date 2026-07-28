@@ -1,25 +1,32 @@
-import type { Project, ProjectRepository, Scene } from "@digify/domain";
+import type { DetectedObject, Project, ProjectRepository, Scene } from "@digify/domain";
 import type { DetectScenesUseCase } from "./DetectScenesUseCase.js";
 import type { RecognizeRoomsUseCase } from "./RecognizeRoomsUseCase.js";
+import type { DetectObjectsUseCase } from "./DetectObjectsUseCase.js";
+import type { PropertyScoreUseCase } from "./PropertyScoreUseCase.js";
 import type { ImportVideoInput, ImportVideoUseCase } from "./ImportVideoUseCase.js";
+import type { PropertyScoreOutput } from "../infrastructure/capabilities/PropertyScoreCapability.js";
 
 export interface ImportAndAnalyzeResult {
   project: Project;
   scenes: Scene[];
+  objects: DetectedObject[];
+  propertyScore: PropertyScoreOutput;
 }
 
 /**
  * Compõe Import + Análise automática — "Análise automática inicia imediatamente"
  * (docs/reference/original-docs/06 - User Journeys.md, Jornada 1). O usuário nunca
  * precisa disparar a análise manualmente. Stage 3 do pipeline (Property
- * Understanding): Scene Detection -> Room Recognition
- * (docs/reference/original-docs/09 - Video Processing Pipeline.md).
+ * Understanding): Scene Detection -> Room Recognition -> Object Detection ->
+ * Property Score (docs/reference/original-docs/09 - Video Processing Pipeline.md).
  */
 export class ImportAndAnalyzeVideoUseCase {
   constructor(
     private readonly importVideo: ImportVideoUseCase,
     private readonly detectScenes: DetectScenesUseCase,
     private readonly recognizeRooms: RecognizeRoomsUseCase,
+    private readonly detectObjects: DetectObjectsUseCase,
+    private readonly computePropertyScore: PropertyScoreUseCase,
     private readonly projectRepository: ProjectRepository,
   ) {}
 
@@ -41,9 +48,22 @@ export class ImportAndAnalyzeVideoUseCase {
       scenes: detectedScenes,
     });
 
+    const objects = await this.detectObjects.execute({
+      projectId: project.id,
+      filePath: input.filePath,
+      frameWidth: intake.width,
+      frameHeight: intake.height,
+      scenes,
+    });
+
+    const propertyScore = await this.computePropertyScore.execute({
+      projectId: project.id,
+      filePath: input.filePath,
+    });
+
     project.transitionTo("ready_for_review");
     await this.projectRepository.save(project);
 
-    return { project, scenes };
+    return { project, scenes, objects, propertyScore };
   }
 }

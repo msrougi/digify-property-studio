@@ -26,8 +26,8 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 |---|---|---|---|
 | `scene.detect` | Vision | Segmentação real em cenas via filtro de scene-change do FFmpeg (determinístico, não probabilístico). | shipped |
 | `room.recognize` | Vision | **Primeira capability com modelo de IA treinado de verdade** — MobileNetV2 (ImageNet) + classificador treinado por nós, 96,3% de acurácia em holdout real. Reconhece `bedroom`/`bathroom`/`kitchen`. Ver `docs/ml/ROOM_CLASSIFIER.md` — **protótipo, dataset de treino sem licença comercial clara, não usar em produção sem resolver isso**. Demais ~17 tipos de ambiente do catálogo original sem dado de treino ainda. | shipped (protótipo) |
-| `object.detect` | Vision | Detecção + tracking de objetos com máscara, bounding box, categoria, confidence. | planned |
-| `property.score` | Vision | Nota 0–100 de potencial comercial (iluminação, estabilidade, composição, organização). | planned |
+| `object.detect` | Vision | YOLOX-Nano (Apache 2.0), zero-shot em COCO (80 classes), sem tracking (roda por frame-cena, não por vídeo inteiro). Mapeia classes COCO para `structural`/`decorative`/`temporary`/`personal`/`luxury`. Ver `docs/ml/OBJECT_DETECTION.md`. | shipped |
+| `property.score` | Vision | Nota 0–100 determinística a partir de sinais já medidos (`lighting.analyze` + contagem de objetos temporários de `object.detect`) — sem estabilidade/composição ainda, por não terem sinal real por trás. | shipped |
 | `lighting.analyze` | Vision | Mede luminância média real via FFmpeg `signalstats`, classifica subexposto/normal/superexposto. Determinístico, não é modelo de IA — confidence sempre 100. Sombras/temperatura de cor ainda não medidas. | shipped |
 | `perspective.analyze` | Vision | Detecta horizonte, linhas verticais, distorção de lente. | planned |
 | `reflection.analyze` | Vision | Detecta superfícies reflexivas e objetos indesejados refletidos (equipe/tripé). | planned |
@@ -38,9 +38,10 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 |---|---|---|---|
 | `lighting.act` | Production | Decide a correção de brilho a partir de `lighting.analyze` (não executa — quem executa é o Rendering Engine). Nunca altera a atmosfera original além do necessário. | shipped |
 | `color.act` | Production | Decide o filtro de color grading para os perfis Warm/Minimal/Luxury. Demais perfis do catálogo original (Modern, Industrial, Beach, Scandinavian, Corporate) ainda não mapeados. | shipped (3 de 8 perfis) |
+| `quality.sharpen` | Production | Realce de nitidez conservador via filtro `unsharp` do FFmpeg (processamento clássico, não é super-resolução por IA). Não estava no catálogo original — adicionado como resultado real e viável no lugar de Real-ESRGAN. Ver `docs/ml/QUALITY.md`. | shipped |
 | `perspective.act` | Production | Corrige horizonte/distorção com base em `perspective.analyze`. | planned |
 | `reflection.act` | Production | Remove objetos refletidos indesejados com base em `reflection.analyze`. | planned |
-| `home_staging.act` | Production | Remove itens temporários (nunca estrutura/mobiliário fixo). Toda remoção é reversível. | planned |
+| `home_staging.act` | Production | Detecção real (`object.detect`) + tentativa de remoção via filtro `delogo` do FFmpeg (interpolação da vizinhança, não é preenchimento generativo por IA — todos os modelos de inpainting avaliados só distribuem pesos via Hugging Face/Google Drive, inacessíveis neste ambiente). Filtros restritos à janela de tempo (`enable='between(t,...)'`) da cena em que o objeto foi detectado, para não borrar outras cenas. Confidence fixo em 75 ("confirm") — nunca auto-aplica. Ver `docs/ml/HOME_STAGING.md`. | shipped (limitação de qualidade conhecida) |
 | `decorator.act` | Production | Adiciona elementos decorativos discretos opcionais. | planned |
 | `audio.engineer` | Production | Remove ruído/vento/eco, normaliza volume. | planned |
 

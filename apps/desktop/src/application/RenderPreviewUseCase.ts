@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { DomainError, type ProjectRepository } from "@digify/domain";
+import { DomainError, type ObjectRepository, type ProjectRepository, type SceneRepository } from "@digify/domain";
 import type { PropertyIntelligenceEngine } from "@digify/pie";
 import type {
   LightingAnalyzeInput,
@@ -14,11 +14,23 @@ import type {
   ColorActOutput,
   ColorProfile,
 } from "../infrastructure/capabilities/ColorActCapability.js";
+import type {
+  QualitySharpenOutput,
+} from "../infrastructure/capabilities/QualitySharpenCapability.js";
+import type {
+  HomeStagingActInput,
+  HomeStagingActOutput,
+  TemporaryObjectBox,
+} from "../infrastructure/capabilities/HomeStagingActCapability.js";
 import type { RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
 
 export interface RenderPreviewInput {
   projectId: string;
   colorProfile: ColorProfile;
+  /** Aplicar realce de nitidez (`quality.sharpen`)? Padrão: não. */
+  applySharpen?: boolean;
+  /** Aplicar tentativa de remoção de itens temporários (`home_staging.act`)? Padrão: não. */
+  applyHomeStaging?: boolean;
 }
 
 export interface RenderPreviewResult {
@@ -37,6 +49,8 @@ export class RenderPreviewUseCase {
     private readonly projectRepository: ProjectRepository,
     private readonly renderingEngine: RenderingEngine,
     private readonly rendersDir: string,
+    private readonly sceneRepository: SceneRepository,
+    private readonly objectRepository: ObjectRepository,
   ) {}
 
   async execute(input: RenderPreviewInput): Promise<RenderPreviewResult> {
@@ -69,6 +83,47 @@ export class RenderPreviewUseCase {
       (filter): filter is string => filter !== null,
     );
 
+    const appliedCorrections = [lightingAct.output.description, colorAct.output.description];
+
+    if (input.applySharpen) {
+      const sharpen = await this.pie.run<void, QualitySharpenOutput>(
+        "quality.sharpen",
+        undefined,
+        { projectId: input.projectId },
+      );
+      filters.push(sharpen.output.ffmpegFilter);
+      appliedCorrections.push(sharpen.output.description);
+    }
+
+    if (input.applyHomeStaging) {
+      const scenes = await this.sceneRepository.findByProject(input.projectId);
+      const temporaryObjects: TemporaryObjectBox[] = [];
+      for (const scene of scenes) {
+        const sceneProps = scene.toProps();
+        const objects = await this.objectRepository.findByScene(sceneProps.id);
+        for (const object of objects) {
+          const objectProps = object.toProps();
+          if (!objectProps.removable) continue;
+          temporaryObjects.push({
+            x: objectProps.boundingBox.x,
+            y: objectProps.boundingBox.y,
+            width: objectProps.boundingBox.width,
+            height: objectProps.boundingBox.height,
+            sceneStartMs: sceneProps.startMs,
+            sceneEndMs: sceneProps.endMs,
+          });
+        }
+      }
+
+      const staging = await this.pie.run<HomeStagingActInput, HomeStagingActOutput>(
+        "home_staging.act",
+        { temporaryObjects },
+        { projectId: input.projectId },
+      );
+      filters.push(...staging.output.ffmpegFilters);
+      appliedCorrections.push(staging.output.description);
+    }
+
     const outputPath = join(this.rendersDir, `${input.projectId}.mp4`);
     const { outputPath: renderedPath } = await this.renderingEngine.render({
       sourcePath,
@@ -78,7 +133,7 @@ export class RenderPreviewUseCase {
 
     return {
       outputPath: renderedPath,
-      appliedCorrections: [lightingAct.output.description, colorAct.output.description],
+      appliedCorrections,
     };
   }
 }

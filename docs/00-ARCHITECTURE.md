@@ -183,25 +183,43 @@ capability):
   (MobileNetV2 pré-treinado + classificador treinado por nós, 96,3% de acurácia em holdout
   real). Ver `docs/ml/ROOM_CLASSIFIER.md` para dataset, metodologia e — importante —
   **status de protótipo** (dataset de treino sem licença comercial clara).
+* Capability `object.detect` — YOLOX-Nano (Apache 2.0), zero-shot em COCO, sem treino próprio
+  (diferente de `room.recognize`, que precisou treinar porque não existe detector
+  pré-treinado de "tipo de cômodo"). Ver `docs/ml/OBJECT_DETECTION.md`. Revelou e corrigiu um
+  bug real no domínio: `DetectedObject.removable` estava definido como "tudo que não é
+  `structural`", o que teria marcado sofás/geladeiras como removíveis.
+* Capability `property.score` — nota 0–100 determinística combinando apenas sinais já
+  medidos de verdade (exposição de `lighting.analyze`, bagunça de `object.detect`) — nunca
+  inventa sinais sem medição real por trás (composição/estabilidade ficam `planned`).
+* Capability `quality.sharpen` — realce de nitidez real via filtro `unsharp` do FFmpeg.
+  Real-ESRGAN foi avaliado e adiado para a futura camada Cloud/GPU — ver `docs/ml/QUALITY.md`.
+* Capability `home_staging.act` — combina detecção real (`object.detect`) com tentativa de
+  remoção via filtro `delogo` do FFmpeg (interpolação de vizinhança, não é inpainting
+  generativo — pesquisamos ativamente LaMa/Moebius/MI-GAN/IOPaint, todos hospedados apenas em
+  Hugging Face/Google Drive, inacessíveis neste ambiente de desenvolvimento). Filtros
+  restritos à janela de tempo da cena onde o objeto foi detectado (`enable='between(t,...)'`),
+  para não afetar cenas seguintes onde a câmera já mudou de cômodo. Confidence fixo em 75
+  ("confirm") — nunca auto-aplica. Ver `docs/ml/HOME_STAGING.md` para a limitação honesta de
+  qualidade.
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
-  Detect → Room Recognize → persistência → Timeline (com ambiente real reconhecido) →
-  Aplicar melhorias (Lighting + Color) → vídeo renderizado real** funcionando de ponta a
-  ponta, verificado com lançamento real via `xvfb-run` + Playwright/`_electron` controlando a
-  janela de verdade e clicando os botões reais da UI (não apenas build, nem chamadas diretas
-  de API pulando a interface).
+  Detect → Room Recognize → Object Detect → Property Score → persistência → Timeline (com
+  ambiente real reconhecido) → Property Score exibido com sugestões → Aplicar melhorias
+  (Lighting + Color + Nitidez opcional + Home Staging opcional) → vídeo renderizado real**
+  funcionando de ponta a ponta, verificado com lançamento real via `xvfb-run` +
+  Playwright/`_electron` controlando a janela de verdade e clicando os botões reais da UI
+  (não apenas build, nem chamadas diretas de API pulando a interface).
 
 Bugs de bundling só visíveis em execução real foram encontrados e corrigidos nestas etapas
 (registrados no changelog dos commits e em `docs/ENGINEERING_STANDARDS.md`, não repetidos
 aqui para evitar duplicação).
 
-**Ainda não implementado nesta fase**: Object detection real (mesma classe de solução de
-`room.recognize`, mas para objetos — próximo candidato natural), Perspective/Reflection
-(analyze+act), Home Staging, Export Manager (exportação final com todos os formatos/redes
-sociais), Player de vídeo, 5 dos 8 perfis de Color originais. Marketplace, Plugin SDK, Cloud
-(sync, colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo —
-arquitetura já preparada para
-recebê-los sem redesenho (Plugin First / Capability Architecture): cada um entra como uma
-nova capability registrada no PIE™, sem alterar o núcleo.
+**Ainda não implementado nesta fase**: Perspective/Reflection (analyze+act), Export Manager
+(exportação final com todos os formatos/redes sociais), Player de vídeo, 5 dos 8 perfis de
+Color originais, inpainting generativo real para Home Staging (fica para a camada Cloud, que
+tem acesso de rede irrestrito e GPU). Marketplace, Plugin SDK, Cloud (sync, colaboração,
+render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já preparada
+para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um entra como
+uma nova capability registrada no PIE™, sem alterar o núcleo.
 
 ## 12. Referências
 

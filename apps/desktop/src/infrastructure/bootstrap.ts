@@ -1,19 +1,30 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { openDatabase, SqliteProjectRepository, SqliteSceneRepository } from "@digify/database";
+import {
+  openDatabase,
+  SqliteObjectRepository,
+  SqliteProjectRepository,
+  SqliteSceneRepository,
+} from "@digify/database";
 import { CapabilityRegistry, EventBus, PropertyIntelligenceEngine } from "@digify/pie";
 import { ImportVideoUseCase } from "../application/ImportVideoUseCase.js";
 import { DetectScenesUseCase } from "../application/DetectScenesUseCase.js";
 import { RecognizeRoomsUseCase } from "../application/RecognizeRoomsUseCase.js";
+import { DetectObjectsUseCase } from "../application/DetectObjectsUseCase.js";
+import { PropertyScoreUseCase } from "../application/PropertyScoreUseCase.js";
 import { ImportAndAnalyzeVideoUseCase } from "../application/ImportAndAnalyzeVideoUseCase.js";
 import { ListProjectsUseCase } from "../application/ListProjectsUseCase.js";
 import { RenderPreviewUseCase } from "../application/RenderPreviewUseCase.js";
 import { IntakeCapability } from "./capabilities/IntakeCapability.js";
 import { SceneDetectCapability } from "./capabilities/SceneDetectCapability.js";
 import { RoomRecognizeCapability } from "./capabilities/RoomRecognizeCapability.js";
+import { ObjectDetectCapability } from "./capabilities/ObjectDetectCapability.js";
+import { PropertyScoreCapability } from "./capabilities/PropertyScoreCapability.js";
 import { LightingAnalyzeCapability } from "./capabilities/LightingAnalyzeCapability.js";
 import { LightingActCapability } from "./capabilities/LightingActCapability.js";
 import { ColorActCapability } from "./capabilities/ColorActCapability.js";
+import { QualitySharpenCapability } from "./capabilities/QualitySharpenCapability.js";
+import { HomeStagingActCapability } from "./capabilities/HomeStagingActCapability.js";
 import { RenderingEngine } from "./render/RenderingEngine.js";
 
 /**
@@ -24,6 +35,7 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
   const db = openDatabase(join(userDataDir, "digify.sqlite"));
   const projectRepository = new SqliteProjectRepository(db);
   const sceneRepository = new SqliteSceneRepository(db);
+  const objectRepository = new SqliteObjectRepository(db);
 
   const registry = new CapabilityRegistry();
   registry.register(new IntakeCapability());
@@ -34,9 +46,13 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
       join(modelsDir, "room_classifier_head.onnx"),
     ),
   );
+  registry.register(new ObjectDetectCapability(join(modelsDir, "yolox_nano.onnx")));
+  registry.register(new PropertyScoreCapability());
   registry.register(new LightingAnalyzeCapability());
   registry.register(new LightingActCapability());
   registry.register(new ColorActCapability());
+  registry.register(new QualitySharpenCapability());
+  registry.register(new HomeStagingActCapability());
 
   const bus = new EventBus();
   const pie = new PropertyIntelligenceEngine(registry, bus);
@@ -44,6 +60,8 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
   const importVideo = new ImportVideoUseCase(pie, projectRepository);
   const detectScenes = new DetectScenesUseCase(pie, sceneRepository);
   const recognizeRooms = new RecognizeRoomsUseCase(pie, sceneRepository);
+  const detectObjects = new DetectObjectsUseCase(pie, objectRepository);
+  const computePropertyScore = new PropertyScoreUseCase(pie, sceneRepository, objectRepository);
 
   const rendersDir = join(userDataDir, "renders");
   mkdirSync(rendersDir, { recursive: true });
@@ -55,16 +73,23 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
       importVideo,
       detectScenes,
       recognizeRooms,
+      detectObjects,
+      computePropertyScore,
       projectRepository,
     ),
     listProjects: new ListProjectsUseCase(projectRepository),
+    computePropertyScore,
     renderPreview: new RenderPreviewUseCase(
       pie,
       projectRepository,
       new RenderingEngine(),
       rendersDir,
+      sceneRepository,
+      objectRepository,
     ),
     sceneRepository,
+    objectRepository,
+    projectRepository,
   };
 }
 

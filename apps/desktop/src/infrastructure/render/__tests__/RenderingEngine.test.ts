@@ -7,6 +7,8 @@ import { measureAverageLuma } from "../../ffmpeg/measureAverageLuma.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
 import { LightingAnalyzeCapability } from "../../capabilities/LightingAnalyzeCapability.js";
 import { LightingActCapability } from "../../capabilities/LightingActCapability.js";
+import { QualitySharpenCapability } from "../../capabilities/QualitySharpenCapability.js";
+import { HomeStagingActCapability } from "../../capabilities/HomeStagingActCapability.js";
 import { RenderingEngine } from "../RenderingEngine.js";
 
 describe("RenderingEngine", () => {
@@ -67,5 +69,37 @@ describe("RenderingEngine", () => {
 
     const lumaAfter = await measureAverageLuma(outputPath);
     expect(lumaAfter).toBeGreaterThan(analyze.output.averageLuma);
+  });
+
+  it("aplica o filtro real de nitidez (unsharp) sem erro, produzindo um vídeo válido", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-sharpen-"));
+    const sourcePath = join(dir, "original.mp4");
+    const outputPath = join(dir, "nitido.mp4");
+    await generateTestVideo(sourcePath, [{ color: "gray", durationSec: 1 }]);
+
+    const sharpen = await new QualitySharpenCapability().execute();
+    const engine = new RenderingEngine();
+    await engine.render({ sourcePath, outputPath, filters: [sharpen.output.ffmpegFilter] });
+
+    const outputMeta = await readVideoMetadata(outputPath);
+    expect(outputMeta.durationMs).toBeGreaterThan(0);
+  });
+
+  it("aplica de verdade uma tentativa de remoção (delogo) de objeto temporário detectado", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-staging-"));
+    const sourcePath = join(dir, "com-bagunca.mp4");
+    const outputPath = join(dir, "sem-bagunca.mp4");
+    await generateTestVideo(sourcePath, [{ color: "gray", durationSec: 1 }], { size: "320x240" });
+
+    const staging = await new HomeStagingActCapability().execute({
+      temporaryObjects: [{ x: 50, y: 50, width: 40, height: 40, sceneStartMs: 0, sceneEndMs: 1000 }],
+    });
+
+    const engine = new RenderingEngine();
+    await engine.render({ sourcePath, outputPath, filters: staging.output.ffmpegFilters });
+
+    const outputMeta = await readVideoMetadata(outputPath);
+    expect(outputMeta.durationMs).toBeGreaterThan(0);
+    expect(outputMeta.width).toBe(320);
   });
 });

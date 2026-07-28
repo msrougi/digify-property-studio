@@ -1,4 +1,5 @@
 import { dialog, ipcMain, type BrowserWindow } from "electron";
+import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
 import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
 
@@ -16,6 +17,29 @@ export interface SceneDTO {
   startMs: number;
   endMs: number;
   roomType: string | null;
+}
+
+export interface DetectedObjectDTO {
+  id: string;
+  sceneId: string;
+  category: ObjectCategory;
+  boundingBox: { x: number; y: number; width: number; height: number };
+  confidence: number;
+  removable: boolean;
+}
+
+export interface PropertyScoreDTO {
+  score: number;
+  lightingScore: number;
+  organizationScore: number;
+  suggestions: string[];
+}
+
+export interface RenderPreviewOptions {
+  projectId: string;
+  colorProfile: ColorProfile;
+  applySharpen?: boolean;
+  applyHomeStaging?: boolean;
 }
 
 export interface RenderPreviewDTO {
@@ -53,9 +77,36 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
   });
 
   ipcMain.handle(
+    "projects:getObjects",
+    async (_event, projectId: string): Promise<DetectedObjectDTO[]> => {
+      const scenes = await app.sceneRepository.findByProject(projectId);
+      const objects: DetectedObjectDTO[] = [];
+      for (const scene of scenes) {
+        const sceneObjects = await app.objectRepository.findByScene(scene.toProps().id);
+        objects.push(...sceneObjects.map(toObjectDto));
+      }
+      return objects;
+    },
+  );
+
+  ipcMain.handle(
+    "projects:getPropertyScore",
+    async (_event, projectId: string): Promise<PropertyScoreDTO> => {
+      const project = await app.projectRepository.findById(projectId);
+      if (!project) {
+        throw new DomainError(`Projeto não encontrado: ${projectId}`, "PROJECT_NOT_FOUND");
+      }
+      return app.computePropertyScore.execute({
+        projectId,
+        filePath: project.toProps().sourceVideoPath,
+      });
+    },
+  );
+
+  ipcMain.handle(
     "projects:renderPreview",
-    async (_event, projectId: string, colorProfile: ColorProfile): Promise<RenderPreviewDTO> => {
-      return app.renderPreview.execute({ projectId, colorProfile });
+    async (_event, options: RenderPreviewOptions): Promise<RenderPreviewDTO> => {
+      return app.renderPreview.execute(options);
     },
   );
 }
@@ -86,4 +137,25 @@ function toSceneDto(scene: {
 }): SceneDTO {
   const props = scene.toProps();
   return { id: props.id, startMs: props.startMs, endMs: props.endMs, roomType: props.roomType };
+}
+
+function toObjectDto(object: {
+  toProps(): {
+    id: string;
+    sceneId: string;
+    category: ObjectCategory;
+    boundingBox: { x: number; y: number; width: number; height: number };
+    confidence: number;
+    removable: boolean;
+  };
+}): DetectedObjectDTO {
+  const props = object.toProps();
+  return {
+    id: props.id,
+    sceneId: props.sceneId,
+    category: props.category,
+    boundingBox: props.boundingBox,
+    confidence: props.confidence,
+    removable: props.removable,
+  };
 }

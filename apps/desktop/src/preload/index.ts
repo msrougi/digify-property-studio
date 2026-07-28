@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ProjectDTO, SceneDTO, RenderPreviewDTO } from "../main/ipc.js";
-import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
+import type {
+  ProjectDTO,
+  SceneDTO,
+  DetectedObjectDTO,
+  PropertyScoreDTO,
+  RenderPreviewOptions,
+  RenderPreviewDTO,
+} from "../main/ipc.js";
 
 /**
  * Única superfície exposta ao renderer — nunca expõe Node/fs diretamente
@@ -14,8 +20,12 @@ const digifyApi = {
   listProjects: (): Promise<ProjectDTO[]> => ipcRenderer.invoke("projects:list"),
   getScenes: (projectId: string): Promise<SceneDTO[]> =>
     ipcRenderer.invoke("projects:getScenes", projectId),
-  renderPreview: (projectId: string, colorProfile: ColorProfile): Promise<RenderPreviewDTO> =>
-    ipcRenderer.invoke("projects:renderPreview", projectId, colorProfile),
+  getObjects: (projectId: string): Promise<DetectedObjectDTO[]> =>
+    ipcRenderer.invoke("projects:getObjects", projectId),
+  getPropertyScore: (projectId: string): Promise<PropertyScoreDTO> =>
+    ipcRenderer.invoke("projects:getPropertyScore", projectId),
+  renderPreview: (options: RenderPreviewOptions): Promise<RenderPreviewDTO> =>
+    ipcRenderer.invoke("projects:renderPreview", options),
 };
 
 contextBridge.exposeInMainWorld("digify", digifyApi);

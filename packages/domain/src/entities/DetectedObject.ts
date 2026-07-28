@@ -18,7 +18,15 @@ export interface DetectedObjectProps {
   category: ObjectCategory;
   boundingBox: BoundingBox;
   confidence: number;
-  /** Objetos estruturais nunca são removíveis — docs/reference/original-docs/08 - AI Agents.md */
+  /**
+   * Apenas objetos temporários são removíveis por padrão — docs/reference/original-docs/08 -
+   * AI Agents.md, AI Home Staging: "Pode remover: roupas, sacolas, baldes, caixas, fios,
+   * brinquedos, utensílios temporários" / "Nunca remover: móveis, paredes, portas, janelas,
+   * armários, eletrodomésticos fixos". Móveis e eletrodomésticos são `decorative`, não
+   * `structural` (a categoria estrutural é reservada para paredes/portas/janelas), então a
+   * regra não podia ser "tudo que não é structural" — teria marcado sofá/geladeira/pia como
+   * removíveis.
+   */
   removable: boolean;
 }
 
@@ -32,7 +40,7 @@ export class DetectedObject {
     boundingBox: BoundingBox;
     confidence: number;
   }): DetectedObject {
-    const removable = input.category !== "structural";
+    const removable = input.category === "temporary";
     return new DetectedObject({ ...input, removable });
   }
 

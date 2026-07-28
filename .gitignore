@@ -20,3 +20,7 @@ tools/room-classifier/data/
 tools/room-classifier/models/*.onnx
 tools/room-classifier/models/*.joblib
 tools/room-classifier/models/*.npz
+
+# tools/object-detector: cópia local do modelo usada só para verify_yolox.py
+# (o .onnx final versionado é apps/desktop/models/yolox_nano.onnx).
+tools/object-detector/*.onnx

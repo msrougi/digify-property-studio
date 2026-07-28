@@ -18,6 +18,31 @@ interface SceneDTO {
 
 type ColorProfile = "warm" | "minimal" | "luxury";
 
+type ObjectCategory = "structural" | "decorative" | "temporary" | "personal" | "luxury";
+
+interface DetectedObjectDTO {
+  id: string;
+  sceneId: string;
+  category: ObjectCategory;
+  boundingBox: { x: number; y: number; width: number; height: number };
+  confidence: number;
+  removable: boolean;
+}
+
+interface PropertyScoreDTO {
+  score: number;
+  lightingScore: number;
+  organizationScore: number;
+  suggestions: string[];
+}
+
+interface RenderPreviewOptions {
+  projectId: string;
+  colorProfile: ColorProfile;
+  applySharpen?: boolean;
+  applyHomeStaging?: boolean;
+}
+
 interface RenderPreviewDTO {
   outputPath: string;
   appliedCorrections: string[];
@@ -28,7 +53,9 @@ interface DigifyApi {
   importVideo(filePath: string): Promise<ProjectDTO>;
   listProjects(): Promise<ProjectDTO[]>;
   getScenes(projectId: string): Promise<SceneDTO[]>;
-  renderPreview(projectId: string, colorProfile: ColorProfile): Promise<RenderPreviewDTO>;
+  getObjects(projectId: string): Promise<DetectedObjectDTO[]>;
+  getPropertyScore(projectId: string): Promise<PropertyScoreDTO>;
+  renderPreview(options: RenderPreviewOptions): Promise<RenderPreviewDTO>;
 }
 
 interface Window {
