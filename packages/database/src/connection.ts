@@ -1,9 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
-
-const currentDir = dirname(fileURLToPath(import.meta.url));
+import { INIT_MIGRATION_SQL } from "./migrations/001_init.js";
 
 /**
  * Abre (ou cria) o banco local SQLite e aplica as migrations pendentes.
@@ -14,8 +10,7 @@ export function openDatabase(path: string): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
-  const migration = readFileSync(join(currentDir, "migrations", "001_init.sql"), "utf-8");
-  db.exec(migration);
+  db.exec(INIT_MIGRATION_SQL);
 
   return db;
 }

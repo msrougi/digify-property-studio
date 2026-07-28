@@ -147,7 +147,7 @@ para **Cloud AI** (modelos grandes, treinamento) — nunca no caminho local obri
 
 ## 11. Escopo desta fase de implementação
 
-Construímos o núcleo de produção completo do Desktop:
+Alvo desta fase (núcleo de produção completo do Desktop):
 
 * Domain Layer + persistência local.
 * Event Bus + Dependency Injection.
@@ -158,10 +158,24 @@ Construímos o núcleo de produção completo do Desktop:
 * Export Manager (MP4/H.264).
 * UI: Import, Timeline, Player, Preview, comparação Antes/Depois.
 
-Fora do escopo desta fase (arquitetura já preparada para receber sem redesenho, conforme
-Plugin First / Capability Architecture): Home Staging e demais capabilities do catálogo,
-Plugin SDK/Marketplace, Cloud (sync, colaboração, render distribuído), Mobile, Digital Twin.
-Cada uma entra como uma nova capability registrada no PIE™, sem alterar o núcleo.
+**Concluído até aqui** (ver `docs/CAPABILITY_REGISTRY.md` para status vivo, capability a
+capability):
+
+* Domain Layer (`Project`, `Scene`, `DetectedObject`, `Confidence`) + Repository Pattern.
+* Banco local SQLite (`@digify/database`), nunca armazena vídeo.
+* PIE™ completo (`@digify/pie`): Capability Registry, Event Bus, orquestrador com gate de
+  confidence.
+* Capability `intake` (hash + metadados de arquivo; extração via ffprobe é próximo passo).
+* App Desktop Electron real (main/preload/renderer), rodando (verificado com lançamento real
+  via `xvfb-run`, não apenas build) com fluxo **Import → Intake → persistência → lista de
+  projetos** funcionando de ponta a ponta.
+
+**Ainda não implementado nesta fase**: Scene/Room/Object detection reais, capabilities de
+Production (Lighting/Color), Rendering Engine, Export Manager, Timeline/Player visual.
+Home Staging e demais capabilities do catálogo, Plugin SDK/Marketplace, Cloud (sync,
+colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
+preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
+entra como uma nova capability registrada no PIE™, sem alterar o núcleo.
 
 ## 12. Referências
 

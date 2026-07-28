@@ -1,4 +1,7 @@
--- docs/00-ARCHITECTURE.md, seção 9: banco local nunca armazena vídeo, apenas metadados.
+// docs/00-ARCHITECTURE.md, seção 9: banco local nunca armazena vídeo, apenas metadados.
+// SQL embutido como constante (não lido de .sql em runtime) para sobreviver a
+// qualquer bundler (Vite/Rollup no Electron não copia arquivos .sql soltos).
+export const INIT_MIGRATION_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -33,3 +36,4 @@ CREATE TABLE IF NOT EXISTS objects (
 );
 
 CREATE INDEX IF NOT EXISTS idx_objects_scene_id ON objects(scene_id);
+`;

@@ -43,6 +43,21 @@ comunicam através de contratos de evento — nunca import direto entre si.
   `domain`, teste de integração no PIE™, registro em `docs/CAPABILITY_REGISTRY.md`.
 * Toda mudança estrutural relevante gera um ADR novo em `docs/adr/`.
 
+## better-sqlite3: ABI Node vs. Electron
+
+`better-sqlite3` é um módulo nativo. O binário compilado precisa bater com o ABI de quem o
+carrega:
+
+* **Testes (`pnpm test`, Vitest sob Node puro):** ABI do Node — padrão após `pnpm install`.
+* **App Electron (`pnpm dev` / `pnpm build` + executar o binário):** ABI do Electron —
+  rodar `pnpm --filter @digify/desktop rebuild:electron` antes.
+
+Alternar de volta para testar: `pnpm --filter @digify/desktop rebuild:node`. Isso é uma
+característica normal de módulos nativos em apps Electron, não um bug — mas gera um erro
+enganoso (`Module did not self-register` / `NODE_MODULE_VERSION` mismatch) se esquecido.
+Descoberto e documentado durante a verificação end-to-end real do vertical slice de import
+(lançamento do Electron via `xvfb-run` nesta mesma sessão).
+
 ## Testes — metas mínimas
 
 * Domain Layer: cobertura ≥ 90%.

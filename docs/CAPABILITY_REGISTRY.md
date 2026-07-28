@@ -12,23 +12,23 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `pie.orchestrator` | Orchestration | Núcleo do PIE™: planejamento, priorização, resolução de conflitos, Capability Registry, validação. Nunca processa mídia. | in_progress |
+| `pie.orchestrator` | Orchestration | Núcleo do PIE™: planejamento, priorização, resolução de conflitos, Capability Registry, validação. Nunca processa mídia. | shipped |
 
 ## Intake
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `intake` | Intake | Hash, metadados (codec/fps/HDR/resolução/duração), thumbnails iniciais, validação de formato. | in_progress |
+| `intake` | Intake | Hash SHA-256 + metadados de arquivo (tamanho, nome). **Nota:** extração de codec/fps/HDR/resolução/duração via ffprobe ainda não implementada — placeholder documentado em `IntakeCapability.ts`. | shipped |
 
 ## Vision (somente leitura — nunca modifica mídia)
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `scene.detect` | Vision | Segmentação em cenas: cortes naturais, mudança de ambiente, cenas repetidas. | in_progress |
-| `room.recognize` | Vision | Classifica o ambiente (sala, cozinha, quarto, ...) e relevância comercial. | in_progress |
-| `object.detect` | Vision | Detecção + tracking de objetos com máscara, bounding box, categoria, confidence. | in_progress |
+| `scene.detect` | Vision | Segmentação em cenas: cortes naturais, mudança de ambiente, cenas repetidas. | planned |
+| `room.recognize` | Vision | Classifica o ambiente (sala, cozinha, quarto, ...) e relevância comercial. | planned |
+| `object.detect` | Vision | Detecção + tracking de objetos com máscara, bounding box, categoria, confidence. | planned |
 | `property.score` | Vision | Nota 0–100 de potencial comercial (iluminação, estabilidade, composição, organização). | planned |
-| `lighting.analyze` | Vision | Analisa luz natural/artificial, sombras, temperatura de cor. Produz achados para o PKG™. | in_progress |
+| `lighting.analyze` | Vision | Analisa luz natural/artificial, sombras, temperatura de cor. Produz achados para o PKG™. | planned |
 | `perspective.analyze` | Vision | Detecta horizonte, linhas verticais, distorção de lente. | planned |
 | `reflection.analyze` | Vision | Detecta superfícies reflexivas e objetos indesejados refletidos (equipe/tripé). | planned |
 
@@ -36,8 +36,8 @@ Status possíveis: `shipped` (implementado e testado), `in_progress` (nesta iter
 
 | ID | Camada | Descrição | Status |
 |---|---|---|---|
-| `lighting.act` | Production | Aplica correção de iluminação com base em `lighting.analyze`. Nunca altera a atmosfera original. | in_progress |
-| `color.act` | Production | Color grading por perfil (Luxury, Minimal, Modern, ...). | in_progress |
+| `lighting.act` | Production | Aplica correção de iluminação com base em `lighting.analyze`. Nunca altera a atmosfera original. | planned |
+| `color.act` | Production | Color grading por perfil (Luxury, Minimal, Modern, ...). | planned |
 | `perspective.act` | Production | Corrige horizonte/distorção com base em `perspective.analyze`. | planned |
 | `reflection.act` | Production | Remove objetos refletidos indesejados com base em `reflection.analyze`. | planned |
 | `home_staging.act` | Production | Remove itens temporários (nunca estrutura/mobiliário fixo). Toda remoção é reversível. | planned |
