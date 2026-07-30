@@ -42,6 +42,7 @@ export interface RenderPreviewOptions {
   applySharpen?: boolean;
   applyHomeStaging?: boolean;
   applyPerspective?: boolean;
+  applyReflection?: boolean;
 }
 
 export interface RenderPreviewDTO {

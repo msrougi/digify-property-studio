@@ -8,7 +8,11 @@ import { generateTestVideo } from "../../../test-support/generateTestVideo.js";
 import { generateTiltedTestVideo } from "../../../test-support/generateTiltedTestVideo.js";
 import { generateVerticalTiltedTestVideo } from "../../../test-support/generateVerticalTiltedTestVideo.js";
 import { generateBarrelDistortedTestVideo } from "../../../test-support/generateBarrelDistortedTestVideo.js";
+import { generateSyntheticReflectionTestVideo } from "../../../test-support/generateSyntheticReflectionTestVideo.js";
 import { detectHorizonTilt } from "../../vision/houghHorizonDetect.js";
+import { extractRgbFrame } from "../../ffmpeg/extractRgbFrame.js";
+import { ReflectionAnalyzeCapability } from "../../capabilities/ReflectionAnalyzeCapability.js";
+import { ReflectionActCapability } from "../../capabilities/ReflectionActCapability.js";
 import { measureAverageLuma } from "../../ffmpeg/measureAverageLuma.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
 import { extractGrayscaleFrame } from "../../ffmpeg/extractGrayscaleFrame.js";
@@ -269,6 +273,68 @@ describe("RenderingEngine", () => {
     expect(correctedPeak).toBeGreaterThan(distortedPeak);
   });
 
+  it("aplica de verdade a redução de reflexo/brilho difuso (overlay de imagem inteira gerado pelo solver real) e o resultado renderizado fica mensuravelmente mais perto da cena limpa", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-reflection-"));
+    const sourcePath = join(dir, "com-reflexo.mp4");
+    const cleanPath = join(dir, "limpo.mp4");
+    const outputPath = join(dir, "sem-reflexo.mp4");
+    await generateSyntheticReflectionTestVideo(sourcePath, true, { width: 320, height: 240, durationSec: 1 });
+    await generateSyntheticReflectionTestVideo(cleanPath, false, { width: 320, height: 240, durationSec: 1 });
+
+    const analyze = await new ReflectionAnalyzeCapability().execute({
+      filePath: sourcePath,
+      atMs: 200,
+      frameWidth: 320,
+      frameHeight: 240,
+    });
+    expect(analyze.output.meanAbsoluteChange).toBeGreaterThan(0);
+
+    const act = await new ReflectionActCapability(dir).execute({
+      ...analyze.output,
+      filePath: sourcePath,
+      atMs: 200,
+      frameWidth: 320,
+      frameHeight: 240,
+      sceneStartMs: 0,
+      sceneEndMs: 1000,
+    });
+    expect(act.output.overlay).not.toBeNull();
+
+    const engine = new RenderingEngine();
+    await engine.render({
+      sourcePath,
+      outputPath,
+      filters: [],
+      overlays: [act.output.overlay as NonNullable<typeof act.output.overlay>],
+    });
+
+    const outputMeta = await readVideoMetadata(outputPath);
+    expect(outputMeta.width).toBe(320);
+    expect(outputMeta.height).toBe(240);
+
+    function mse(a: Buffer, b: Buffer): number {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) {
+        const d = (a[i] as number) - (b[i] as number);
+        sum += d * d;
+      }
+      return sum / a.length;
+    }
+
+    const cleanFrame = await extractRgbFrame(cleanPath, 200, 320, 240, 320);
+    const beforeFrame = await extractRgbFrame(sourcePath, 200, 320, 240, 320);
+    const afterFrame = await extractRgbFrame(outputPath, 200, 320, 240, 320);
+
+    const mseBefore = mse(beforeFrame.buffer, cleanFrame.buffer);
+    const mseAfter = mse(afterFrame.buffer, cleanFrame.buffer);
+
+    // Verificação em loop fechado real: o vídeo RENDERIZADO (com o overlay
+    // já composto via FFmpeg de verdade) fica mais perto da cena limpa do
+    // que o vídeo original com reflexo -- não só o array em memória do
+    // teste unitário do solver.
+    expect(mseAfter).toBeLessThan(mseBefore);
+  }, 30000);
+
   it("aplica de verdade uma tentativa de remoção (delogo) de objeto temporário detectado (fallback, sem modelo real)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "digify-render-staging-"));
     const sourcePath = join(dir, "com-bagunca.mp4");
@@ -341,5 +407,31 @@ describe("RenderingEngine", () => {
     const lumaOutsidePatch = await measureAverageLuma(outsidePatchPath);
     expect(lumaInsidePatch).toBeGreaterThan(200);
     expect(lumaOutsidePatch).toBeLessThan(30);
+  }, 20_000);
+
+  it("redimensiona de verdade um overlay pra caber no frame quando width/height são informados", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-overlay-scale-"));
+    const sourcePath = join(dir, "preto.mp4");
+    const outputPath = join(dir, "com-patch-escalado.mp4");
+    const patchPath = join(dir, "patch-branco-pequeno.png");
+    await generateTestVideo(sourcePath, [{ color: "black", durationSec: 1 }], { size: "320x240" });
+    // patch nativo bem menor que a área que deve cobrir depois de escalado.
+    await generateSolidPng(patchPath, "white", "40x40");
+
+    const engine = new RenderingEngine();
+    await engine.render({
+      sourcePath,
+      outputPath,
+      filters: [],
+      overlays: [{ imagePath: patchPath, x: 0, y: 0, width: 320, height: 240 }],
+    });
+
+    // se o overlay não tivesse sido escalado, um canto oposto ao (0,0) do
+    // patch nativo 40x40 continuaria preto -- com o scale=320:240 aplicado,
+    // o frame inteiro fica branco.
+    const cornerPath = join(dir, "canto-oposto.mp4");
+    await execFileAsync(FFMPEG_PATH, ["-y", "-i", outputPath, "-vf", "crop=50:50:250:170", cornerPath]);
+    const lumaCorner = await measureAverageLuma(cornerPath);
+    expect(lumaCorner).toBeGreaterThan(200);
   }, 20_000);
 });

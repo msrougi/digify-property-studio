@@ -28,6 +28,8 @@ import { QualitySharpenCapability } from "./capabilities/QualitySharpenCapabilit
 import { HomeStagingActCapability } from "./capabilities/HomeStagingActCapability.js";
 import { PerspectiveAnalyzeCapability } from "./capabilities/PerspectiveAnalyzeCapability.js";
 import { PerspectiveActCapability } from "./capabilities/PerspectiveActCapability.js";
+import { ReflectionAnalyzeCapability } from "./capabilities/ReflectionAnalyzeCapability.js";
+import { ReflectionActCapability } from "./capabilities/ReflectionActCapability.js";
 import { RenderingEngine } from "./render/RenderingEngine.js";
 
 /**
@@ -70,6 +72,11 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
 
   registry.register(new PerspectiveAnalyzeCapability());
   registry.register(new PerspectiveActCapability());
+
+  const reflectionPatchesDir = join(userDataDir, "reflection-patches");
+  mkdirSync(reflectionPatchesDir, { recursive: true });
+  registry.register(new ReflectionAnalyzeCapability());
+  registry.register(new ReflectionActCapability(reflectionPatchesDir));
 
   const bus = new EventBus();
   const pie = new PropertyIntelligenceEngine(registry, bus);

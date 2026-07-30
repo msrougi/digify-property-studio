@@ -50,6 +50,7 @@ interface RenderPreviewOptions {
   applySharpen?: boolean;
   applyHomeStaging?: boolean;
   applyPerspective?: boolean;
+  applyReflection?: boolean;
 }
 
 interface RenderPreviewDTO {

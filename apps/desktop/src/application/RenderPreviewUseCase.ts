@@ -30,6 +30,14 @@ import type {
   PerspectiveActInput,
   PerspectiveActOutput,
 } from "../infrastructure/capabilities/PerspectiveActCapability.js";
+import type {
+  ReflectionAnalyzeInput,
+  ReflectionAnalyzeOutput,
+} from "../infrastructure/capabilities/ReflectionAnalyzeCapability.js";
+import type {
+  ReflectionActInput,
+  ReflectionActOutput,
+} from "../infrastructure/capabilities/ReflectionActCapability.js";
 import type { ImageOverlay, RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
 
 export interface RenderPreviewInput {
@@ -41,6 +49,8 @@ export interface RenderPreviewInput {
   applyHomeStaging?: boolean;
   /** Aplicar correção de horizonte (`perspective.analyze`+`perspective.act`)? Padrão: não. */
   applyPerspective?: boolean;
+  /** Aplicar redução de reflexo/brilho difuso (`reflection.analyze`+`reflection.act`)? Padrão: não. */
+  applyReflection?: boolean;
 }
 
 export interface RenderPreviewResult {
@@ -104,6 +114,48 @@ export class RenderPreviewUseCase {
       );
       filters.push(sharpen.output.ffmpegFilter);
       appliedCorrections.push(sharpen.output.description);
+    }
+
+    if (input.applyReflection) {
+      const { width: frameWidth, height: frameHeight } = project.toProps().video;
+      const scenes = await this.sceneRepository.findByProject(input.projectId);
+
+      // Roda ANTES de home_staging: o overlay de reflexo cobre o frame
+      // inteiro, então precisa compor primeiro pra não sobrescrever um
+      // patch local de home_staging na mesma cena (Rendering Engine compõe
+      // overlays na ordem em que entram no array).
+      for (const scene of scenes) {
+        const sceneProps = scene.toProps();
+        const atMs = Math.round((sceneProps.startMs + sceneProps.endMs) / 2);
+
+        const reflectionAnalyze = await this.pie.run<
+          ReflectionAnalyzeInput,
+          ReflectionAnalyzeOutput
+        >(
+          "reflection.analyze",
+          { filePath: sourcePath, atMs, frameWidth, frameHeight },
+          { projectId: input.projectId },
+        );
+
+        const reflectionAct = await this.pie.run<ReflectionActInput, ReflectionActOutput>(
+          "reflection.act",
+          {
+            ...reflectionAnalyze.output,
+            filePath: sourcePath,
+            atMs,
+            frameWidth,
+            frameHeight,
+            sceneStartMs: sceneProps.startMs,
+            sceneEndMs: sceneProps.endMs,
+          },
+          { projectId: input.projectId },
+        );
+
+        if (reflectionAct.output.overlay) {
+          overlays.push(reflectionAct.output.overlay);
+          appliedCorrections.push(reflectionAct.output.description);
+        }
+      }
     }
 
     if (input.applyHomeStaging) {

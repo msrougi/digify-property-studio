@@ -13,6 +13,9 @@ export interface ImageOverlay {
   /** Sem startSec/endSec, o overlay vale para o vídeo inteiro. */
   startSec?: number;
   endSec?: number;
+  /** Redimensiona o overlay antes de compor (ex.: correção de reflexo gerada numa resolução menor que o frame real). Sem isso, usa o tamanho nativo da imagem. */
+  width?: number;
+  height?: number;
 }
 
 export interface RenderRequest {
@@ -101,8 +104,14 @@ export class RenderingEngine {
       request.filters.length > 0 ? [`[0:v]${request.filters.join(",")}${baseLabel}`] : [];
 
     let previousLabel = baseLabel;
+    const scaleSteps: string[] = [];
     const overlaySteps = overlays.map((overlay, index) => {
-      const inputLabel = `[${index + 1}:v]`;
+      let inputLabel = `[${index + 1}:v]`;
+      if (overlay.width !== undefined && overlay.height !== undefined) {
+        const scaledLabel = `[scaled${index}]`;
+        scaleSteps.push(`${inputLabel}scale=${Math.round(overlay.width)}:${Math.round(overlay.height)}${scaledLabel}`);
+        inputLabel = scaledLabel;
+      }
       const outputLabel = index === overlays.length - 1 ? "[vout]" : `[v${index}]`;
       const enable =
         overlay.startSec !== undefined && overlay.endSec !== undefined
@@ -113,7 +122,7 @@ export class RenderingEngine {
       return step;
     });
 
-    const filterComplex = [...simpleChain, ...overlaySteps].join(";");
+    const filterComplex = [...simpleChain, ...scaleSteps, ...overlaySteps].join(";");
 
     return [
       "-y",

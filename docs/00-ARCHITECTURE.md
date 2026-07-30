@@ -236,13 +236,30 @@ capability):
   fechado (aplica sobre distorção/inclinação conhecida, roda a mesma detecção de novo no
   resultado, confirma melhora real) além de ponta a ponta pela UI real do Electron. Ver
   `docs/vision/PERSPECTIVE.md`.
+* Capabilities `reflection.analyze` + `reflection.act` — algoritmo clássico real (não IA,
+  sem pesos treinados) de supressão de reflexo/brilho difuso: porte próprio, linha a linha,
+  do código MATLAB oficial de Yang et al., "Fast Single Image Reflection Suppression via
+  Convex Optimization" (CVPR 2019) — zera gradientes fracos (assumidos reflexo/brilho difuso,
+  premissa do método), reconstrói a imagem a partir do laplaciano só das bordas fortes
+  restantes, resolvendo a EDP no domínio da frequência via DCT-II/DCT-III (`dct2d.ts`,
+  implementação própria com base de cossenos cacheada — sem isso o custo seria proibitivo).
+  Verificado em múltiplas camadas: DCT ortonormal (round-trip exato, Parseval), autovalores do
+  Laplaciano sob DCT-II cruzados contra o Laplaciano calculado diretamente antes de confiar no
+  solver rápido, o algoritmo completo contra ground truth sintético que bate com a premissa
+  real do método (reflexo de baixo gradiente sobre uma cena de alto contraste — MSE melhora,
+  bordas fortes preservadas), loop fechado com vídeo MP4 real (analyze → act → Rendering
+  Engine → frame do vídeo renderizado mensuravelmente mais perto da cena limpa) e ponta a
+  ponta pela UI real do Electron. Limitação honesta central: não localiza/segmenta a
+  superfície reflexiva (sem sinal real disponível pra isso, ver histórico completo de busca em
+  `docs/vision/REFLECTION.md`) — é uma correção de cena inteira (overlay cobre o frame todo),
+  sempre `confirm`, nunca auto-executa.
 * App Desktop Electron real (main/preload/renderer) com fluxo **Import → Intake → Scene
   Detect → Room Recognize → Object Detect → Property Score → persistência → Timeline (com
   ambiente real reconhecido) → Property Score exibido com sugestões → assistir o vídeo
   original → Aplicar melhorias (Lighting + Color + Nitidez opcional + Home Staging opcional +
-  Nivelamento de horizonte opcional) → assistir a prévia renderizada → Exportar vídeo final
-  (formato original ou preset de rede social) para onde o usuário escolher** funcionando de
-  ponta a ponta, verificado com lançamento real
+  Nivelamento de horizonte opcional + Redução de reflexo/brilho difuso opcional) → assistir a
+  prévia renderizada → Exportar vídeo final (formato original ou preset de rede social) para
+  onde o usuário escolher** funcionando de ponta a ponta, verificado com lançamento real
   via `xvfb-run` + Playwright/`_electron` controlando a janela de verdade e clicando os
   botões reais da UI (não apenas build, nem chamadas diretas de API pulando a interface).
 
@@ -252,16 +269,16 @@ aqui para evitar duplicação) — incluindo um novo relacionado ao Player: `pat
 Node não existe no `require("url")` polyfillado do preload sandboxado do Electron, só no
 processo main com Node completo.
 
-**Ainda não implementado nesta fase**: Reflection (analyze+act) — pesquisa em duas rodadas
-(MirrorNet, GDNet, 3DRef, ADE20K/CSAILVision, ONNX Model Zoo, Objects365, XReflection,
-SAM2-UNet); o único candidato com pesos hospedados de forma acessível neste ambiente
-(`PINTO0309/reflection-removal`, GitHub Releases) foi baixado e testado de verdade contra
-ground truth sintético — reprovou (piora a imagem em vez de melhorar, autor já avisa que é
-WIP). Diferente do Home Staging não existe um fallback clássico honesto (uma heurística de
-"brilho = reflexo" seria só ruído, não uma versão limitada da capability — ver
-`docs/vision/REFLECTION.md`). Perspective (horizonte + linhas verticais + distorção de lente
-grande angular), os 8 perfis de Color do catálogo original e o inpainting generativo real do
-Home Staging (LaMa) já estão implementados. Marketplace, Plugin SDK, Cloud (sync,
+**Ainda não implementado nesta fase**: um detector real que localize/segmente a superfície
+refletiva (espelho/vidro) — duas rodadas de pesquisa de modelos treinados (MirrorNet, GDNet,
+3DRef, ADE20K/CSAILVision, ONNX Model Zoo, Objects365, XReflection, SAM2-UNet, e o único
+candidato acessível — `PINTO0309/reflection-removal` — baixado e reprovado num teste
+empírico real) não encontraram um sinal real disponível nesse ambiente (ver
+`docs/vision/REFLECTION.md`). A supressão de reflexo/brilho difuso em si **já está
+implementada** — um algoritmo clássico real (sem pesos treinados, ver bullet acima) que atua
+na cena inteira em vez de uma região localizada. Perspective (horizonte + linhas verticais +
+distorção de lente grande angular), os 8 perfis de Color do catálogo original e o inpainting
+generativo real do Home Staging (LaMa) também já estão implementados. Marketplace, Plugin SDK, Cloud (sync,
 colaboração, render distribuído), Mobile, Digital Twin seguem fora do escopo — arquitetura já
 preparada para recebê-los sem redesenho (Plugin First / Capability Architecture): cada um
 entra como uma nova capability registrada no PIE™, sem alterar o núcleo.

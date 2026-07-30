@@ -32,6 +32,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
   const [applySharpen, setApplySharpen] = useState(false);
   const [applyHomeStaging, setApplyHomeStaging] = useState(false);
   const [applyPerspective, setApplyPerspective] = useState(false);
+  const [applyReflection, setApplyReflection] = useState(false);
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [result, setResult] = useState<RenderPreviewDTO | null>(null);
   const [exportPresets, setExportPresets] = useState<ExportPresetDTO[]>([]);
@@ -56,6 +57,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
         applySharpen,
         applyHomeStaging,
         applyPerspective,
+        applyReflection,
       });
       setResult(renderResult);
       setStatus("done");
@@ -126,6 +128,15 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
             disabled={status === "rendering"}
           />
           Nivelar horizonte
+        </label>
+        <label className="render-panel__checkbox">
+          <input
+            type="checkbox"
+            checked={applyReflection}
+            onChange={(event) => setApplyReflection(event.target.checked)}
+            disabled={status === "rendering"}
+          />
+          Reduzir reflexo/brilho difuso
         </label>
         <button className="button-primary" onClick={handleRender} disabled={status === "rendering"}>
           {status === "rendering" ? "Aplicando…" : "Aplicar melhorias"}
