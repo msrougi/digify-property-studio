@@ -38,6 +38,35 @@ linux:
   category: AudioVideo
   maintainer: Digify Property Studio
 
+# mac: só o alvo "zip" é gerável a partir de Linux — DMG precisa de `sips`
+# (ferramenta exclusiva do macOS) pra gerar o ícone/volume, falha com
+# `sips process failed ENOENT` neste ambiente. x64 (Intel) e arm64 (Apple
+# Silicon/"Mx") empacotados separadamente. Sem assinatura de código (precisa
+# rodar num Mac de verdade com certificado Apple Developer) — usuário
+# precisa liberar no Gatekeeper (clique direito → Abrir, ou System
+# Settings → Privacy & Security → "Open Anyway"). Ver docs/PACKAGING.md.
+mac:
+  target:
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.video
+
+# win: NSIS precisa de `wine` funcional pra cross-compilar de Linux — neste
+# ambiente, mesmo com wine64 instalado, o passo final falha
+# (`wine: could not exec the wine loader`, precisa de um WINEPREFIX
+# inicializado/suporte 32-bit que não foi configurado). Mantido aqui pra
+# quando rodar num CI/máquina com wine de verdade configurado (ou nativo no
+# Windows) — nesse caso, gera um instalador de verdade em vez do fallback
+# portátil (zip do diretório `win-unpacked`) usado neste ambiente. Ver
+# docs/PACKAGING.md.
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
 # O rebuild automático do electron-builder (via @electron/rebuild) para
 # better-sqlite3 baixa o prebuild ERRADO neste ambiente (ABI do Node em vez
 # do Electron, mesmo bug real já visto em `rebuild:electron` — ver

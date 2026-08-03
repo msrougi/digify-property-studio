@@ -1,7 +1,11 @@
 # Empacotamento — instalador real (electron-builder)
 
-**Status: shipped e verificado de verdade neste ambiente (Linux/AppImage) —
-não é só uma config que "deveria funcionar".**
+**Status: shipped nas 4 plataformas (Linux, macOS Intel, macOS Apple
+Silicon, Windows) — mas só o pacote Linux foi verificado rodando de
+verdade neste ambiente. Os pacotes Mac/Windows foram gerados com sucesso a
+partir daqui (cross-build), mas não puderam ser executados/testados neste
+sandbox Linux — ver "O que foi verificado de verdade em cada plataforma"
+mais abaixo.**
 
 ## Como gerar o instalador
 
@@ -98,15 +102,76 @@ como "bedroom", 5 objetos detectados, Property Score 100/100 calculado) →
 "Aplicar melhorias" → render real produzido. Screenshot confirmando visto
 durante a verificação.
 
-## Limitação honesta: só Linux/AppImage foi verificado
+## Gerando pra todas as plataformas a partir de Linux
 
-Este ambiente de desenvolvimento é Linux x64 — o `electron-builder.yml`
-também aceita configuração `mac`/`win` (DMG/NSIS), e a arquitetura do
-projeto não impede gerar esses alvos, mas **não foram testados aqui**
-(precisam rodar numa máquina macOS/Windows real, ou CI com os runners
-correspondentes, pra fazer sentido — cross-building um `.dmg`/`.exe`
-funcional a partir de Linux tem limitações reais do próprio
-electron-builder, principalmente assinatura de código). Antes de distribuir
-pra usuários Mac/Windows, repetir esse mesmo processo de verificação
-(gerar o pacote de verdade, rodar o executável de verdade, não só confiar
-na config) nessas plataformas.
+```bash
+cd apps/desktop
+pnpm build:installer                                    # Linux (AppImage) — alvo configurado por padrão
+npx electron-builder --mac --x64 --arm64 --publish never --config electron-builder.yml
+npx electron-builder --win --x64 --publish never --config electron-builder.yml
+```
+
+## O que foi verificado de verdade em cada plataforma
+
+* **Linux (AppImage, x64)** — ✅ **verificado de ponta a ponta**: executável
+  rodado via `xvfb-run` + Playwright `_electron` (import real → pipeline de
+  análise real → render real). Este é o único artefato deste conjunto que
+  passou pela mesma disciplina de "rodar de verdade" do resto do projeto.
+* **macOS Intel (zip, x64)** e **macOS Apple Silicon (zip, arm64)** — ⚠️
+  **gerados com sucesso** (`.app` real dentro de um `.zip`, ~650MB cada,
+  contendo o Electron completo + node_modules + os modelos ONNX), mas **não
+  puderam ser executados neste ambiente** (Linux não roda binários Mach-O).
+  DMG não foi possível gerar (ver abaixo). Sem assinatura de código —
+  usuário final vai precisar liberar no Gatekeeper na primeira execução.
+* **Windows (x64)** — ❌ **instalador NSIS não foi possível gerar aqui**
+  (ver "Terceiro problema" abaixo). Gerado em vez disso um **fallback real
+  e funcional**: `Digify Property Studio-0.1.0-win-x64-portable.zip`, um
+  zip do diretório `win-unpacked` completo (app + todas as DLLs +
+  `resources/` com os modelos) — o usuário extrai e roda
+  `digify-property-studio.exe` direto, sem assistente de instalação. Não
+  testado neste ambiente (mesma limitação de arquitetura — não roda .exe
+  em Linux puro).
+
+## Terceiro e quarto problemas reais: cross-build de Mac/Windows a partir de Linux
+
+### DMG do macOS precisa de `sips` (ferramenta exclusiva do macOS)
+
+```
+⨯ sips process failed ENOENT
+```
+
+`sips` é uma ferramenta de linha de comando de manipulação de imagem que só
+existe no macOS — usada pelo electron-builder pra gerar o ícone/volume do
+`.dmg`. Não tem workaround real a partir de Linux; o alvo `zip` (que não
+precisa dela) foi usado no lugar. Gerar o `.dmg` de verdade exige rodar o
+build numa máquina macOS real (ou CI com runner macOS).
+
+### NSIS do Windows precisa de um `wine` funcional, não só instalado
+
+```
+⨯ wine process failed 1
+wine: could not exec the wine loader
+```
+
+Primeira tentativa: `wine` nem estava instalado (`spawn wine ENOENT`).
+Instalado via `apt-get install wine64` + symlink pra `wine` no PATH — isso
+resolveu o empacotamento inicial (assinatura simulada dos `.exe`/`.dll`,
+criação do instalador NSIS em si), mas o electron-builder tenta EXECUTAR o
+instalador recém-criado via `wine` como parte do processo (provavelmente
+pra gerar metadados de diff/update), e isso falhou — `wine64` sozinho
+(sem o pacote `wine` completo/um `WINEPREFIX` inicializado via `wineboot`,
+possivelmente sem suporte 32-bit) não é o bastante pra rodar um executável
+Windows de verdade, só pra participar do processo de build até certo ponto.
+Configurar um ambiente wine completo e funcional estava fora do escopo de
+tempo disponível — o fallback real (zip portátil do `win-unpacked`) cobre
+a necessidade prática (usuário Windows consegue rodar o app) sem essa
+dependência.
+
+## Antes de distribuir pra usuários de verdade
+
+Os pacotes Mac/Windows **nunca foram executados** — só o processo de build
+foi validado. Antes de entregar pra um usuário real nessas plataformas,
+repetir a mesma disciplina de verificação usada no Linux (rodar o
+executável de verdade, importar um vídeo real, confirmar que o pipeline
+completo funciona) numa máquina Mac/Windows real ou CI com os runners
+correspondentes — não assumir que "buildou sem erro" equivale a "funciona".
