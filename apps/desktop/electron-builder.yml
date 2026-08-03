@@ -1,0 +1,46 @@
+appId: com.digify.propertystudio
+productName: Digify Property Studio
+executableName: digify-property-studio
+# App standalone, sem auto-update/publish (não há repositório/servidor de
+# releases configurado) — sem isso, o electron-builder tenta gerar metadados
+# de auto-update e falha por falta de config de `repository`/`publish`.
+publish: null
+directories:
+  output: dist-installer
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+# asar desabilitado de propósito: os binários reais (ffmpeg-static/
+# ffprobe-static, executados via child_process) e os módulos nativos
+# (better-sqlite3/onnxruntime-node, .node) não podem ser abertos/executados
+# de dentro de um app.asar de forma confiável — `asarUnpack` deveria
+# resolver isso via redirecionamento transparente do Electron, mas na
+# prática causou `ENOTDIR` ao tentar spawnar o ffprobe (o path calculado
+# pelo pacote ffprobe-static aponta pro app.asar, não pro
+# app.asar.unpacked). Sem asar, tudo fica em arquivos reais no disco — mais
+# simples e mais robusto que depurar a fundo o redirecionamento do Electron
+# pra esse caso. Ver docs/PACKAGING.md.
+asar: false
+
+# Modelos ONNX (~220MB no total) não versionados no git (acima do limite de
+# 100MB do GitHub por arquivo — ver tools/*/README.md) — o instalador os
+# empacota de qualquer forma, lendo direto do disco no momento do build.
+extraResources:
+  - from: models
+    to: models
+
+linux:
+  target:
+    - AppImage
+  category: AudioVideo
+  maintainer: Digify Property Studio
+
+# O rebuild automático do electron-builder (via @electron/rebuild) para
+# better-sqlite3 baixa o prebuild ERRADO neste ambiente (ABI do Node em vez
+# do Electron, mesmo bug real já visto em `rebuild:electron` — ver
+# docs/PACKAGING.md). Desligado aqui; `build:installer` faz o fix manual
+# certo (prebuild-install --runtime=electron) antes de chamar electron-builder.
+npmRebuild: false

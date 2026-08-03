@@ -262,6 +262,12 @@ capability):
   onde o usuário escolher** funcionando de ponta a ponta, verificado com lançamento real
   via `xvfb-run` + Playwright/`_electron` controlando a janela de verdade e clicando os
   botões reais da UI (não apenas build, nem chamadas diretas de API pulando a interface).
+* **Instalador real** (electron-builder, AppImage no Linux deste ambiente) — ver
+  `docs/PACKAGING.md` para os dois bugs reais de empacotamento encontrados e corrigidos
+  (ABI nativo errado do `better-sqlite3` mesmo no rebuild automático do electron-builder;
+  `ENOTDIR` ao spawnar ffmpeg/ffprobe com asar habilitado, resolvido com `asar: false`) —
+  verificado rodando o EXECUTÁVEL EMPACOTADO de ponta a ponta (import real → pipeline de
+  análise real → render real), não só a configuração.
 
 Bugs de bundling só visíveis em execução real foram encontrados e corrigidos nestas etapas
 (registrados no changelog dos commits e em `docs/ENGINEERING_STANDARDS.md`, não repetidos

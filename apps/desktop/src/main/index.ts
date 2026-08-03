@@ -37,9 +37,11 @@ function createWindow(): void {
   });
 
   // Em dev/xvfb-run: apps/desktop/out/main/../../models = apps/desktop/models.
-  // Empacotamento final (electron-builder extraResources) é um passo futuro
-  // de packaging — não bloqueia esta fase de desenvolvimento.
-  const modelsDir = join(__dirname, "../../models");
+  // Empacotado (electron-builder): `models` vai via `extraResources` pra
+  // `resourcesPath`, fora do app.asar — modelos ONNX grandes não podem ser
+  // abertos de dentro do asar por bibliotecas nativas (onnxruntime-node),
+  // só arquivos lidos via `fs` puro do Node (ver electron-builder.yml).
+  const modelsDir = app.isPackaged ? join(process.resourcesPath, "models") : join(__dirname, "../../models");
   const digify = bootstrap(app.getPath("userData"), modelsDir);
   registerIpcHandlers(digify, window);
 
