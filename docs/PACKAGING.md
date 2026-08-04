@@ -259,6 +259,63 @@ sistema real) neste sandbox Linux, então a eficácia definitiva só será
 confirmada quando o usuário testar de novo no Mac real. Documentado aqui
 com essa ressalva explícita, ao invés de alegar certeza que não existe.
 
+## Sétimo problema real: `fix-native-abi.mjs` tinha plataforma/arquitetura fixas no código
+
+O bug mais sério encontrado até agora, e o mais embaraçoso: `scripts/fix-native-abi.mjs`
+tinha `--platform=linux --arch=x64` **fixos no código** desde a primeira
+versão do script (criado originalmente só pensando no fluxo de AppImage
+deste sandbox Linux). Isso funcionava certo pra Linux "por acidente" (a
+plataforma fixa batia com o host de qualquer forma), mas **todo pacote
+gerado pra outra plataforma (macOS, Windows) recebia um binário nativo
+`better-sqlite3` errado** — um `.node` compilado pra Linux, embutido dentro
+do pacote Mac/Windows.
+
+Só foi descoberto porque um usuário testou o pacote Mac de verdade num Mac
+Intel real (depois de já ter passado pelos dois problemas anteriores) e o
+app abriu com tela em branco / crash silencioso. Rodando o executável
+direto pelo Terminal (não pelo Finder) apareceu o erro real:
+
+```
+UnhandledPromiseRejectionWarning: Error: dlopen(.../better_sqlite3.node, 0x0001):
+tried: '.../better_sqlite3.node' (not a mach-o file), ...
+```
+
+"not a mach-o file" é a assinatura exata desse tipo de bug: o arquivo
+existe e tem conteúdo, mas é o formato binário ERRADO pra essa plataforma
+(ELF do Linux, não Mach-O do macOS) — o dlopen do macOS rejeita
+imediatamente. Nenhum teste automatizado neste sandbox Linux pega isso,
+porque aqui a plataforma fixa (`linux`) sempre bateu com o host — só
+comparando explicitamente contra outra plataforma real é que o bug
+aparece.
+
+**Fix**: `scripts/fix-native-abi.mjs` agora usa `process.platform` e
+`process.arch` (a máquina que está rodando o script *agora*) em vez de
+valores fixos — com overrides opcionais via `DIGIFY_NATIVE_PLATFORM`/
+`DIGIFY_NATIVE_ARCH` pra quando alguém precisar mesmo de cross-build
+deliberado. Verificado rodando o AppImage Linux recompilado de ponta a
+ponta neste sandbox (`xvfb-run` direto no binário, sem Playwright dessa
+vez por simplicidade) — sem nenhum erro de `dlopen`/`better_sqlite3`,
+confirma que o binário nativo carrega certo.
+
+**Efeito colateral real, documentado com honestidade**: como um único run
+do script só corrige o binário nativo pra UMA plataforma/arquitetura (a do
+host), `electron-builder.yml` foi ajustado pra gerar só `mac x64` por
+padrão agora (antes gerava `x64` + `arm64` no mesmo run, e o `arm64`
+sempre teria recebido o binário `x64` errado — mesma classe de bug, nunca
+tinha sido testado num Mac Apple Silicon real pra ser pego). Quem for
+gerar o pacote num Mac Apple Silicon precisa trocar `arch: [x64]` pra
+`arch: [arm64]` em `apps/desktop/electron-builder.yml` antes de rodar
+`pnpm build:installer` — nesse Mac, `process.arch` já será `arm64`
+automaticamente, então o script corrige certo sem precisar de nenhuma
+outra mudança.
+
+**O pacote Windows portátil gerado numa sessão anterior
+(`Digify Property Studio-0.1.0-win-x64-portable.zip`) tem exatamente esse
+mesmo bug** (native binary Linux dentro de um pacote Windows) e não deve
+ser considerado confiável — precisa ser regenerado (idealmente rodando o
+build numa máquina Windows real, seguindo a mesma disciplina de "buildar
+na própria plataforma de destino" que resolveu isso pro Mac).
+
 ## Antes de distribuir pra usuários de verdade
 
 Os pacotes Mac/Windows **nunca foram executados** — só o processo de build

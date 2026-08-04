@@ -49,17 +49,23 @@ linux:
 
 # mac: só o alvo "zip" é gerável a partir de Linux — DMG precisa de `sips`
 # (ferramenta exclusiva do macOS) pra gerar o ícone/volume, falha com
-# `sips process failed ENOENT` neste ambiente. x64 (Intel) e arm64 (Apple
-# Silicon/"Mx") empacotados separadamente. Sem assinatura de código (precisa
-# rodar num Mac de verdade com certificado Apple Developer) — usuário
-# precisa liberar no Gatekeeper (clique direito → Abrir, ou System
+# `sips process failed ENOENT` neste ambiente. Sem assinatura de código
+# (precisa rodar num Mac de verdade com certificado Apple Developer) —
+# usuário precisa liberar no Gatekeeper (clique direito → Abrir, ou System
 # Settings → Privacy & Security → "Open Anyway"). Ver docs/PACKAGING.md.
+#
+# Só o arch `x64` aqui de propósito: `scripts/fix-native-abi.mjs` corrige o
+# binário nativo do better-sqlite3 pra UMA arquitetura por vez (a da máquina
+# que está rodando o build agora) — gerar x64+arm64 no mesmo run empacotaria
+# a arquitetura que não bate com o host com um binário nativo inválido (bug
+# real encontrado num Mac Intel de verdade, ver "Sétimo problema real" em
+# docs/PACKAGING.md). Quem builda num Mac Apple Silicon deve trocar esse
+# valor pra `arm64` antes de rodar `pnpm build:installer`.
 mac:
   target:
     - target: zip
       arch:
         - x64
-        - arm64
   category: public.app-category.video
   # Mitigação pro crash real EXC_BAD_INSTRUCTION dentro de
   # `-[NSPersistentUIManager flushAllChanges]` (achado rodando de verdade
