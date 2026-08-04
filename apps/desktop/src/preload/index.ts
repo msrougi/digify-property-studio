@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { randomUUID } from "node:crypto";
 import type {
   ProjectDTO,
   SceneDTO,
@@ -42,7 +41,7 @@ const digifyApi = {
     filePath: string,
     onProgress?: (progress: Omit<ProgressEvent, "operationId">) => void,
   ): Promise<ProjectDTO> => {
-    const operationId = randomUUID();
+    const operationId = crypto.randomUUID();
     const unsubscribe = onProgress
       ? subscribeToProgress("progress:import", operationId, onProgress)
       : null;
@@ -63,7 +62,7 @@ const digifyApi = {
     options: RenderPreviewOptions,
     onProgress?: (progress: Omit<ProgressEvent, "operationId">) => void,
   ): Promise<RenderPreviewDTO> => {
-    const operationId = randomUUID();
+    const operationId = crypto.randomUUID();
     const unsubscribe = onProgress
       ? subscribeToProgress("progress:render", operationId, onProgress)
       : null;
