@@ -97,6 +97,57 @@ describe("RenderPreviewUseCase", () => {
     expect(lumaAfter).toBeGreaterThan(50); // era ~16 (preto), corrigido para cima
   });
 
+  it("reporta progresso real por etapas (só as correções pedidas) e termina em 'Renderizando vídeo final' a 100%", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    await projectRepository.save(
+      Project.create({
+        id: "p1",
+        name: "Apartamento Escuro",
+        sourceVideoPath: sourcePath,
+        sourceVideoHash: "hash-fixture",
+        video: { durationMs: 1000, width: 64, height: 64, fps: 10, codecName: "h264", hasAudio: false },
+      }),
+    );
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+
+    const registry = new CapabilityRegistry();
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new LightingActCapability());
+    registry.register(new ColorActCapability());
+    registry.register(new QualitySharpenCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+
+    const useCase = new RenderPreviewUseCase(
+      pie,
+      projectRepository,
+      new RenderingEngine(),
+      dir,
+      sceneRepository,
+      objectRepository,
+    );
+
+    const updates: { stage: string; stageIndex: number; totalStages: number; percent: number }[] = [];
+    await useCase.execute(
+      { projectId: "p1", colorProfile: "warm", applySharpen: true },
+      (progress) => updates.push(progress),
+    );
+
+    expect(updates.length).toBeGreaterThan(0);
+    // Só 3 etapas nesta chamada: lighting+color, sharpen, render — nem reflexo
+    // nem home staging nem perspectiva, porque não foram pedidos.
+    const stageNames = [...new Set(updates.map((u) => u.stage))];
+    expect(stageNames).toEqual([
+      "Analisando iluminação e cor",
+      "Aplicando nitidez",
+      "Renderizando vídeo final",
+    ]);
+    expect(updates.every((u) => u.totalStages === 3)).toBe(true);
+    const last = updates[updates.length - 1];
+    expect(last?.stage).toBe("Renderizando vídeo final");
+    expect(last?.percent).toBe(100);
+  });
+
   it("lança erro de domínio quando o projeto não existe", async () => {
     const projectRepository = new SqliteProjectRepository(db);
     const sceneRepository = new SqliteSceneRepository(db);

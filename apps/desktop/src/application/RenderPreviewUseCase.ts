@@ -40,6 +40,7 @@ import type {
 } from "../infrastructure/capabilities/ReflectionActCapability.js";
 import type { ImageOverlay, RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
 import { detectCameraMotion } from "../infrastructure/vision/detectCameraMotion.js";
+import type { OnStageProgress } from "./progress.js";
 
 export interface RenderPreviewInput {
   projectId: string;
@@ -74,12 +75,39 @@ export class RenderPreviewUseCase {
     private readonly objectRepository: ObjectRepository,
   ) {}
 
-  async execute(input: RenderPreviewInput): Promise<RenderPreviewResult> {
+  async execute(
+    input: RenderPreviewInput,
+    onProgress?: OnStageProgress,
+  ): Promise<RenderPreviewResult> {
     const project = await this.projectRepository.findById(input.projectId);
     if (!project) {
       throw new DomainError(`Projeto não encontrado: ${input.projectId}`, "PROJECT_NOT_FOUND");
     }
 
+    // Lista de etapas dinâmica: só entram as correções de fato pedidas nesta
+    // chamada — reportar uma etapa que nem vai rodar seria enganoso.
+    const stages = ["Analisando iluminação e cor"];
+    if (input.applySharpen) stages.push("Aplicando nitidez");
+    if (input.applyReflection) stages.push("Reduzindo reflexo");
+    if (input.applyHomeStaging) stages.push("Removendo itens temporários");
+    if (input.applyPerspective) stages.push("Corrigindo perspectiva");
+    stages.push("Renderizando vídeo final");
+    const totalStages = stages.length;
+    let currentStageIndex = 0;
+    const emit = (percent: number): void => {
+      onProgress?.({
+        stage: stages[currentStageIndex] as string,
+        stageIndex: currentStageIndex + 1,
+        totalStages,
+        percent,
+      });
+    };
+    const nextStage = (): void => {
+      currentStageIndex++;
+      emit(0);
+    };
+
+    emit(0);
     const sourcePath = project.toProps().sourceVideoPath;
 
     const analyze = await this.pie.run<LightingAnalyzeInput, LightingAnalyzeOutput>(
@@ -106,8 +134,10 @@ export class RenderPreviewUseCase {
 
     const appliedCorrections = [lightingAct.output.description, colorAct.output.description];
     const overlays: ImageOverlay[] = [];
+    emit(100);
 
     if (input.applySharpen) {
+      nextStage();
       const sharpen = await this.pie.run<void, QualitySharpenOutput>(
         "quality.sharpen",
         undefined,
@@ -115,9 +145,11 @@ export class RenderPreviewUseCase {
       );
       filters.push(sharpen.output.ffmpegFilter);
       appliedCorrections.push(sharpen.output.description);
+      emit(100);
     }
 
     if (input.applyReflection) {
+      nextStage();
       const { width: frameWidth, height: frameHeight } = project.toProps().video;
       const scenes = await this.sceneRepository.findByProject(input.projectId);
 
@@ -166,9 +198,11 @@ export class RenderPreviewUseCase {
         }
         appliedCorrections.push(reflectionAct.output.description);
       }
+      emit(100);
     }
 
     if (input.applyHomeStaging) {
+      nextStage();
       const { width: frameWidth, height: frameHeight } = project.toProps().video;
       const scenes = await this.sceneRepository.findByProject(input.projectId);
 
@@ -211,9 +245,11 @@ export class RenderPreviewUseCase {
         }
         appliedCorrections.push(staging.output.description);
       }
+      emit(100);
     }
 
     if (input.applyPerspective) {
+      nextStage();
       const videoProps = project.toProps().video;
       const midpointMs = Math.round(videoProps.durationMs / 2);
 
@@ -245,15 +281,19 @@ export class RenderPreviewUseCase {
         filters.push(perspectiveAct.output.ffmpegFilter);
       }
       appliedCorrections.push(perspectiveAct.output.description);
+      emit(100);
     }
 
+    nextStage();
+
     const outputPath = join(this.rendersDir, `${input.projectId}.mp4`);
-    const { outputPath: renderedPath } = await this.renderingEngine.render({
-      sourcePath,
-      outputPath,
-      filters,
-      overlays,
-    });
+    const { outputPath: renderedPath } = await this.renderingEngine.render(
+      { sourcePath, outputPath, filters, overlays },
+      // % real do FFmpeg (tempo de vídeo já processado / duração total) —
+      // a única etapa com sub-progresso granular de verdade; as demais só
+      // reportam 0/100 ao começar/terminar (ver `emit`/`nextStage` acima).
+      (progress) => emit(progress.percent),
+    );
 
     return {
       outputPath: renderedPath,

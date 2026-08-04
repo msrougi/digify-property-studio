@@ -103,4 +103,53 @@ describe("ImportAndAnalyzeVideoUseCase", () => {
     expect(persistedScenes.length).toBe(scenes.length);
     expect(persistedScenes.every((scene) => scene.toProps().roomType !== null)).toBe(true);
   }, 30_000);
+
+  it("reporta progresso real nas 5 etapas, em ordem, terminando a última em 100%", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+    const registry = new CapabilityRegistry();
+    registry.register(new IntakeCapability());
+    registry.register(new SceneDetectCapability());
+    registry.register(
+      new RoomRecognizeCapability(
+        join(MODELS_DIR, "mobilenetv2-12.onnx"),
+        join(MODELS_DIR, "room_classifier_head.onnx"),
+      ),
+    );
+    registry.register(new ObjectDetectCapability(join(MODELS_DIR, "yolox_nano.onnx")));
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new PropertyScoreCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+
+    let sceneIdSequence = 0;
+    let objectIdSequence = 0;
+    const useCase = new ImportAndAnalyzeVideoUseCase(
+      new ImportVideoUseCase(pie, projectRepository, () => "p2"),
+      new DetectScenesUseCase(pie, sceneRepository, () => `s${++sceneIdSequence}`),
+      new RecognizeRoomsUseCase(pie, sceneRepository),
+      new DetectObjectsUseCase(pie, objectRepository, () => `o${++objectIdSequence}`),
+      new PropertyScoreUseCase(pie, sceneRepository, objectRepository),
+      projectRepository,
+    );
+
+    const updates: { stage: string; stageIndex: number; totalStages: number; percent: number }[] = [];
+    await useCase.execute({ filePath: videoPath }, (progress) => updates.push(progress));
+
+    const stageNames = updates.map((u) => u.stage);
+    expect(stageNames).toEqual([
+      "Importando vídeo",
+      "Importando vídeo",
+      "Detectando cenas",
+      "Detectando cenas",
+      "Reconhecendo cômodos",
+      "Reconhecendo cômodos",
+      "Detectando objetos",
+      "Detectando objetos",
+      "Calculando Property Score",
+      "Calculando Property Score",
+    ]);
+    expect(updates.every((u) => u.totalStages === 5)).toBe(true);
+    expect(updates[updates.length - 1]?.percent).toBe(100);
+  }, 30_000);
 });
