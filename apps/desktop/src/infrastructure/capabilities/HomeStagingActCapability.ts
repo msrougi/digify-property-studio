@@ -27,6 +27,17 @@ export interface HomeStagingActInput {
   atMs: number;
   frameWidth: number;
   frameHeight: number;
+  /**
+   * Se a câmera fica parada durante a cena (medido de verdade por
+   * `detectCameraMotion`, nunca assumido). O patch de inpainting real
+   * (overlay) vem de UM frame só e fica colado sobre a cena inteira — com
+   * câmera em movimento isso vira um artefato óbvio (bug real reportado
+   * testando num vídeo de imóvel de verdade), então nesse caso caímos pro
+   * fallback `delogo` mesmo com o modelo de IA disponível (ele recalcula
+   * por frame, não tem esse problema). Sem este campo (compatibilidade com
+   * chamadas antigas/testes), assume `true`.
+   */
+  sceneIsStatic?: boolean;
 }
 
 export interface HomeStagingOverlay {
@@ -115,7 +126,7 @@ export class HomeStagingActCapability
       };
     }
 
-    if (this.isModelAvailable()) {
+    if (this.isModelAvailable() && input.sceneIsStatic !== false) {
       try {
         return await this.executeRealInpainting(input);
       } catch (error) {
@@ -124,6 +135,13 @@ export class HomeStagingActCapability
           `Inpainting real falhou (${(error as Error).message}) — usando remoção por interpolação.`,
         );
       }
+    }
+
+    if (this.isModelAvailable() && input.sceneIsStatic === false) {
+      return this.executeDelogoFallback(
+        input,
+        `${input.temporaryObjects.length} item(ns) temporário(s) — câmera em movimento nesta cena, então o patch de IA (que vem de um único frame) ficaria descolado do vídeo; usando remoção por interpolação (menos nítida, mas acompanha o movimento).`,
+      );
     }
 
     return this.executeDelogoFallback(input);

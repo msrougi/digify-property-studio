@@ -116,10 +116,98 @@ de conteúdo — o usuário sempre confirma antes de aplicar.
   manualmente nesta sessão com o modelo presente localmente, documentado
   aqui como limitação honesta de cobertura de teste.
 
+## Bug real encontrado testando num vídeo de imóvel de verdade: patch estático sobre câmera em movimento
+
+Exatamente o risco que a seção "Caminho futuro" (abaixo, versão anterior
+deste documento) já apontava como não resolvido: um usuário testou o app
+real num vídeo de passeio por um imóvel (câmera andando pela cena, comum
+em vídeo imobiliário) e reportou "criou um vídeo com uma imagem estática,
+não removeu nada" — tanto `home_staging.act` (caminho de inpainting real)
+quanto `reflection.act` geram a correção a partir de **um único frame** e
+compõem essa imagem, parada, sobre a janela de tempo inteira da cena. Com
+câmera parada isso é imperceptível; com câmera em movimento, vira um
+"adesivo" óbvio colado sobre um vídeo que muda de enquadramento.
+
+**Fix real aplicado**: `detectCameraMotion.ts` mede a diferença real de
+luma (MAD, mean absolute difference) entre um frame do início e um do fim
+da cena (com margem, pra não pegar frame de transição de corte) — nunca
+assume, sempre mede. `RenderPreviewUseCase` roda essa medição por cena
+antes de chamar `reflection.act`/`home_staging.act` e passa o resultado
+via `sceneIsStatic`. Com câmera em movimento (`sceneIsStatic: false`):
+
+* `reflection.act` pula a correção nessa cena (overlay `null`), com
+  descrição explicando por quê.
+* `home_staging.act` pula a tentativa de inpainting real (mesmo com o
+  modelo disponível) e usa direto o fallback `delogo` — que recalcula por
+  frame, então não tem esse problema de "colar" um frame só.
+
+Isso não é a solução ideal (tracking de câmera + reprocessamento por
+frame, descrita abaixo, seria mais completa) mas é real, honesta e resolve
+o sintoma mais grave (o "adesivo" óbvio) com custo de implementação e
+performance viáveis agora.
+
+## Conflito real: `onnxruntime-node` fixado em 1.23.0 (Mac Intel) impede o LaMa de carregar
+
+Descoberto investigando o mesmo relato acima: além do problema de câmera
+em movimento, o modelo LaMa **não carrega de jeito nenhum** com a versão
+de `onnxruntime-node` atualmente fixada no projeto (`1.23.0` — necessária
+pra corrigir um crash real em Mac Intel, ver `docs/PACKAGING.md`, "Quinto
+problema real"):
+
+```
+Load model from lama_inpainting.onnx failed:
+Node (node_DFT_2630) Op (DFT) [ShapeInferenceError]
+is_onesided and inverse attributes cannot be enabled at the same time
+```
+
+Confirmado isolando a variável: o **mesmo** arquivo `.onnx` carrega sem
+erro no Python `onnxruntime` 1.28.0 e também no `onnxruntime-node` 1.27.0
+(testado diretamente, fora do projeto) — só falha na 1.23.0. É um bug real
+de shape inference do ONNX Runtime pra essa combinação específica e válida
+de atributos do nó `DFT` (usada pelo LaMa nas suas Fast Fourier
+Convolutions), corrigido em alguma versão entre 1.24.0 e 1.27.0 —
+exatamente a mesma janela de versões em que a Microsoft **removeu** o
+binário pré-compilado de macOS Intel (`darwin/x64`) do pacote (ver
+`docs/PACKAGING.md`). Ou seja: **não existe hoje nenhuma versão publicada
+de `onnxruntime-node` que sirva pras duas coisas ao mesmo tempo** — Mac
+Intel precisa de `<=1.23.0`, o modelo LaMa precisa de `>=~1.24.0`.
+
+**Efeito prático**: no Mac Intel do usuário (e em qualquer build fixado em
+`onnxruntime-node@1.23.0`), `home_staging.act` **nunca consegue usar o
+modelo LaMa real**, mesmo com o arquivo `lama_inpainting.onnx` presente —
+`isModelAvailable()` retorna `true`, a tentativa acontece de verdade, mas
+`ort.InferenceSession.create()` sempre lança essa exceção, capturada pelo
+`catch` existente, caindo pro fallback `delogo` automaticamente (não
+quebra o render, mas nunca entrega a qualidade de IA generativa
+prometida). Isso é diferente do problema de câmera em movimento acima —
+mesmo numa cena 100% estática, o resultado no Mac Intel hoje é sempre
+`delogo`, nunca o LaMa real.
+
+**Não resolvido ainda** — as opções reais consideradas:
+
+1. Manter `onnxruntime-node@1.23.0` (o app nem abre sem isso no Mac Intel
+   — bloqueio bem mais grave que uma feature degradada) e aceitar que o
+   LaMa real fica indisponível nessa plataforma até a Microsoft restaurar
+   o binário `darwin/x64` numa versão futura que já tenha o fix do DFT.
+2. Descobrir a versão exata (entre 1.24.0 e 1.27.0) onde o bug do DFT foi
+   corrigido e verificar se, por acaso, alguma versão nesse intervalo
+   também restaurou `darwin/x64` — não verificado ainda, mas a pesquisa
+   anterior (`docs/PACKAGING.md`) já checou 1.24.0/1.25.1/1.26.0/1.27.0 e
+   nenhuma tinha `darwin/x64`, então é improvável.
+3. Rodar duas versões de `onnxruntime-node` lado a lado (uma pro app
+   Electron via IPC/binário nativo, outra isolada só pra inferência do
+   LaMa, ex. via processo filho) — tecnicamente possível, mas complexidade
+   real alta pra um ganho ainda incerto.
+
+Opção 1 é a que está em produção agora — escolhida porque um app que não
+abre é estritamente pior que uma feature usando o fallback clássico.
+
 ## Caminho futuro
 
 Linhas verticais/distorção de lente e outras melhorias de Perspective
-seguem em aberto. Pra Home Staging especificamente: rodar o mesmo LaMa por
-cena com tracking de câmera (em vez de um patch estático por cena) melhora
+seguem em aberto. Resolver o conflito de versão do `onnxruntime-node`
+acima (pra restaurar LaMa real em Mac Intel) e, complementarmente, rodar o
+mesmo LaMa por cena com tracking de câmera real (reprocessar conforme o
+enquadramento muda, em vez de só pular a cena quando há movimento) melhora
 a robustez em vídeos com movimento de câmera mais agressivo — não
 implementado ainda.

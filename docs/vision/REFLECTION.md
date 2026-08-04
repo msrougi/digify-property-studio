@@ -151,8 +151,30 @@ permanece (não localizar a superfície reflexiva) é honesta e documentada,
 não escondida atrás de um nome de capability que promete mais do que
 entrega.
 
+## Bug real encontrado testando num vídeo de imóvel de verdade: overlay estático sobre câmera em movimento
+
+O overlay gerado aqui vem de **um único frame** (o meio da cena) e é
+composto, parado, sobre a janela de tempo da cena inteira. Um usuário
+testou num vídeo real de passeio por imóvel (câmera andando pela cena,
+comportamento típico de vídeo imobiliário) e reportou o resultado como
+"uma imagem estática" colada sobre o vídeo — com câmera parada isso é
+imperceptível, mas com câmera em movimento vira um artefato óbvio.
+
+**Fix real aplicado**: `detectCameraMotion.ts` mede a diferença real de
+luma entre um frame do início e um do fim da cena (nunca assume). Se a
+cena não é estática o bastante, `RenderPreviewUseCase` passa
+`sceneIsStatic: false` e `reflection.act` pula a correção nessa cena
+(overlay `null`), com a descrição explicando o motivo, em vez de aplicar
+um resultado que ficaria visivelmente errado.
+
 ## Caminho futuro
 
+* Rodar a correção por frame (ou a cada N frames, com blend) em vez de uma
+  vez por cena resolveria o problema de movimento de câmera de forma mais
+  completa do que simplesmente pular a cena — não implementado ainda por
+  causa do custo do solver (o algoritmo já levou ~6–12s por frame nos
+  testes atuais numa resolução de trabalho de 960px; rodar em toda cena de
+  um vídeo inteiro exigiria otimização significativa antes de ser viável).
 * Um detector real de superfície reflexiva (dos candidatos da primeira/
   segunda rodada) continuaria sendo o complemento natural — permitiria
   restringir a correção à região do espelho/vidro em vez do frame inteiro.

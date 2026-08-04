@@ -15,6 +15,15 @@ export interface ReflectionActInput extends ReflectionAnalyzeOutput {
   frameHeight: number;
   sceneStartMs: number;
   sceneEndMs: number;
+  /**
+   * Se a câmera fica parada durante a cena (medido de verdade por
+   * `detectCameraMotion`, nunca assumido) — o overlay gerado aqui vem de UM
+   * frame só e fica colado sobre a cena inteira; com câmera em movimento
+   * isso vira um artefato óbvio (bug real reportado testando num vídeo de
+   * imóvel de verdade). Sem este campo (compatibilidade com chamadas
+   * antigas/testes), assume `true`.
+   */
+  sceneIsStatic?: boolean;
 }
 
 export interface ReflectionOverlay {
@@ -66,6 +75,17 @@ export class ReflectionActCapability
         output: {
           overlay: null,
           description: "Nenhum reflexo/brilho difuso perceptível pra reduzir nesta cena.",
+        },
+        confidence: Confidence.of(100),
+      };
+    }
+
+    if (input.sceneIsStatic === false) {
+      return {
+        output: {
+          overlay: null,
+          description:
+            "Redução de reflexo não aplicada nesta cena — câmera em movimento (o overlay gerado a partir de um único frame ficaria visivelmente descolado do vídeo).",
         },
         confidence: Confidence.of(100),
       };

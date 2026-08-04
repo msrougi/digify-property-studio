@@ -1,9 +1,13 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { FFMPEG_PATH } from "../ffmpeg/paths.js";
 import { readVideoMetadata } from "../ffmpeg/ffprobeMetadata.js";
 
-const execFileAsync = promisify(execFile);
+/** Progresso real medido a partir da própria saída do FFmpeg (`-progress`), nunca simulado. */
+export interface RenderProgress {
+  /** 0–100, calculado a partir do tempo de vídeo já processado / duração total real. */
+  percent: number;
+  elapsedMs: number;
+}
 
 export interface ImageOverlay {
   /** Imagem estática já gerada (ex.: patch de inpainting real) a compor sobre o vídeo. */
@@ -43,7 +47,7 @@ export interface RenderResult {
  * quando houver necessidade real de diferenciação de qualidade x velocidade.
  */
 export class RenderingEngine {
-  async render(request: RenderRequest): Promise<RenderResult> {
+  async render(request: RenderRequest, onProgress?: (progress: RenderProgress) => void): Promise<RenderResult> {
     const overlays = request.overlays ?? [];
 
     const args =
@@ -51,9 +55,65 @@ export class RenderingEngine {
         ? await this.buildOverlayArgs(request, overlays)
         : this.buildSimpleArgs(request);
 
-    await execFileAsync(FFMPEG_PATH, args);
+    // Duração total real do vídeo de origem — base pra converter o tempo já
+    // processado (reportado pelo próprio FFmpeg via `-progress`) numa
+    // porcentagem real, nunca uma animação simulada.
+    const { durationMs: totalDurationMs } = await readVideoMetadata(request.sourcePath);
+    await this.runFfmpeg(args, totalDurationMs, onProgress);
 
     return { outputPath: request.outputPath };
+  }
+
+  /**
+   * Roda o FFmpeg via `spawn` (em vez de `execFile`, que só resolve/rejeita no
+   * final) pra poder ler `-progress pipe:1` linha a linha enquanto o processo
+   * roda — é isso que permite reportar tempo decorrido e % reais durante o
+   * encode, sem esperar terminar.
+   */
+  private runFfmpeg(
+    args: string[],
+    totalDurationMs: number,
+    onProgress?: (progress: RenderProgress) => void,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    const fullArgs = ["-y", "-progress", "pipe:1", "-nostats", ...args.filter((arg) => arg !== "-y")];
+
+    return new Promise((resolve, reject) => {
+      const child = spawn(FFMPEG_PATH, fullArgs);
+      let stdoutBuffer = "";
+      let stderrOutput = "";
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdoutBuffer += chunk.toString("utf8");
+        const lines = stdoutBuffer.split("\n");
+        stdoutBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const outTimeMatch = /^out_time=(\d+):(\d+):(\d+\.\d+)$/.exec(line.trim());
+          if (outTimeMatch && onProgress) {
+            const [, hours, minutes, seconds] = outTimeMatch as unknown as [string, string, string, string];
+            const outTimeMs =
+              (Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)) * 1000;
+            const percent =
+              totalDurationMs > 0 ? Math.min(100, (outTimeMs / totalDurationMs) * 100) : 0;
+            onProgress({ percent, elapsedMs: Date.now() - startedAt });
+          }
+        }
+      });
+
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderrOutput += chunk.toString("utf8");
+      });
+
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0) {
+          onProgress?.({ percent: 100, elapsedMs: Date.now() - startedAt });
+          resolve();
+        } else {
+          reject(new Error(`ffmpeg saiu com código ${code}: ${stderrOutput}`));
+        }
+      });
+    });
   }
 
   /** Caminho original — cadeia simples de filtros num único `-vf` (sem overlays). */

@@ -39,6 +39,7 @@ import type {
   ReflectionActOutput,
 } from "../infrastructure/capabilities/ReflectionActCapability.js";
 import type { ImageOverlay, RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
+import { detectCameraMotion } from "../infrastructure/vision/detectCameraMotion.js";
 
 export interface RenderPreviewInput {
   projectId: string;
@@ -128,6 +129,14 @@ export class RenderPreviewUseCase {
         const sceneProps = scene.toProps();
         const atMs = Math.round((sceneProps.startMs + sceneProps.endMs) / 2);
 
+        const { isStatic: sceneIsStatic } = await detectCameraMotion(
+          sourcePath,
+          sceneProps.startMs,
+          sceneProps.endMs,
+          frameWidth,
+          frameHeight,
+        );
+
         const reflectionAnalyze = await this.pie.run<
           ReflectionAnalyzeInput,
           ReflectionAnalyzeOutput
@@ -147,14 +156,15 @@ export class RenderPreviewUseCase {
             frameHeight,
             sceneStartMs: sceneProps.startMs,
             sceneEndMs: sceneProps.endMs,
+            sceneIsStatic,
           },
           { projectId: input.projectId },
         );
 
         if (reflectionAct.output.overlay) {
           overlays.push(reflectionAct.output.overlay);
-          appliedCorrections.push(reflectionAct.output.description);
         }
+        appliedCorrections.push(reflectionAct.output.description);
       }
     }
 
@@ -171,6 +181,14 @@ export class RenderPreviewUseCase {
 
         if (temporaryObjects.length === 0) continue;
 
+        const { isStatic: sceneIsStatic } = await detectCameraMotion(
+          sourcePath,
+          sceneProps.startMs,
+          sceneProps.endMs,
+          frameWidth,
+          frameHeight,
+        );
+
         const staging = await this.pie.run<HomeStagingActInput, HomeStagingActOutput>(
           "home_staging.act",
           {
@@ -181,6 +199,7 @@ export class RenderPreviewUseCase {
             sceneStartMs: sceneProps.startMs,
             sceneEndMs: sceneProps.endMs,
             temporaryObjects,
+            sceneIsStatic,
           },
           { projectId: input.projectId },
         );

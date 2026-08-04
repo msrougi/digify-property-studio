@@ -1,5 +1,11 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HomeStagingActCapability } from "../HomeStagingActCapability.js";
+
+const REAL_MODEL_PATH = join(__dirname, "../../../../models/lama_inpainting.onnx");
+const REAL_VIDEO_PATH = join(__dirname, "../__fixtures__/bedroom-sample.mp4");
+const hasRealModel = existsSync(REAL_MODEL_PATH);
 
 const BASE_INPUT = {
   filePath: "/nao-usado-no-fallback.mp4",
@@ -72,5 +78,48 @@ describe("HomeStagingActCapability (sem modelo real disponível — caminho fall
 
     expect(result.output.usedRealInpainting).toBe(false);
     expect(result.output.legacyFilters.length).toBe(1);
+  });
+});
+
+describe.skipIf(!hasRealModel)("HomeStagingActCapability (com modelo LaMa real disponível)", () => {
+  // NOTA: onnxruntime-node <=1.23.0 (fixado nesta versão por causa de um bug
+  // real de suporte a macOS Intel, ver docs/PACKAGING.md) tem um bug próprio
+  // de shape inference que impede o modelo LaMa de carregar ("is_onesided
+  // and inverse attributes cannot be enabled at the same time" no nó DFT) —
+  // confirmado carregando o MESMO .onnx com sucesso na v1.27.0 e falhando na
+  // v1.23.0. Ver docs/ml/HOME_STAGING.md, "Conflito real". Por isso este
+  // teste aceita os dois desfechos possíveis (sucesso real ou fallback
+  // gracioso) em vez de exigir sucesso — continua validando que a tentativa
+  // de verdade acontece (não é suprimida pelo gate de movimento) e que, se
+  // falhar, cai pro delogo sem quebrar nada.
+  it("tenta inpainting real quando a cena é estática — sucesso real OU fallback gracioso, nunca quebra", async () => {
+    const result = await new HomeStagingActCapability(REAL_MODEL_PATH).execute({
+      ...BASE_INPUT,
+      filePath: REAL_VIDEO_PATH,
+      temporaryObjects: [{ x: 20, y: 20, width: 30, height: 30 }],
+      sceneIsStatic: true,
+    });
+
+    if (result.output.usedRealInpainting) {
+      expect(result.output.overlay).not.toBeNull();
+    } else {
+      expect(result.output.overlay).toBeNull();
+      expect(result.output.legacyFilters.length).toBe(1);
+      expect(result.output.description).toContain("Inpainting real falhou");
+    }
+  }, 30000);
+
+  it("cai pro fallback delogo quando a câmera está em movimento na cena, mesmo com o modelo real disponível — overlay estático de um frame só ficaria descolado do vídeo", async () => {
+    const result = await new HomeStagingActCapability(REAL_MODEL_PATH).execute({
+      ...BASE_INPUT,
+      filePath: REAL_VIDEO_PATH,
+      temporaryObjects: [{ x: 20, y: 20, width: 30, height: 30 }],
+      sceneIsStatic: false,
+    });
+
+    expect(result.output.usedRealInpainting).toBe(false);
+    expect(result.output.overlay).toBeNull();
+    expect(result.output.legacyFilters.length).toBe(1);
+    expect(result.output.description).toContain("câmera em movimento");
   });
 });

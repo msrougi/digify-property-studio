@@ -52,4 +52,16 @@ describe("ReflectionActCapability", () => {
     expect(result.confidence.decision).toBe("confirm");
     expect(result.confidence.shouldExecuteAutomatically).toBe(false);
   }, 30000);
+
+  it("não gera overlay quando a câmera está em movimento na cena, mesmo com sinal de reflexo forte — um overlay de um frame só ficaria descolado do vídeo", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-reflection-act-motion-"));
+    const result = await new ReflectionActCapability(dir).execute({
+      ...BASE_INPUT,
+      meanAbsoluteChange: 0.03,
+      sceneIsStatic: false,
+    });
+
+    expect(result.output.overlay).toBeNull();
+    expect(result.output.description).toContain("câmera em movimento");
+  });
 });

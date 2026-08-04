@@ -409,6 +409,30 @@ describe("RenderingEngine", () => {
     expect(lumaOutsidePatch).toBeLessThan(30);
   }, 20_000);
 
+  it("reporta progresso real (tempo decorrido e % crescente até 100) durante o encode, lido da própria saída do FFmpeg", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-render-progress-"));
+    const sourcePath = join(dir, "original.mp4");
+    const outputPath = join(dir, "processado.mp4");
+    await generateTestVideo(sourcePath, [{ color: "gray", durationSec: 3 }], { size: "320x240" });
+
+    const progressUpdates: { percent: number; elapsedMs: number }[] = [];
+    const engine = new RenderingEngine();
+    await engine.render(
+      { sourcePath, outputPath, filters: ["eq=saturation=1.1"] },
+      (progress) => progressUpdates.push(progress),
+    );
+
+    expect(progressUpdates.length).toBeGreaterThan(0);
+    // Cada update reflete tempo real de processamento já decorrido — nunca negativo, nunca simulado.
+    for (const update of progressUpdates) {
+      expect(update.percent).toBeGreaterThanOrEqual(0);
+      expect(update.percent).toBeLessThanOrEqual(100);
+      expect(update.elapsedMs).toBeGreaterThanOrEqual(0);
+    }
+    // O último update reportado é sempre 100% (fechamento real do processo, código de saída 0).
+    expect(progressUpdates[progressUpdates.length - 1]?.percent).toBe(100);
+  }, 20_000);
+
   it("redimensiona de verdade um overlay pra caber no frame quando width/height são informados", async () => {
     const dir = mkdtempSync(join(tmpdir(), "digify-render-overlay-scale-"));
     const sourcePath = join(dir, "preto.mp4");
