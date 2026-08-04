@@ -117,12 +117,20 @@ npx electron-builder --win --x64 --publish never --config electron-builder.yml
   rodado via `xvfb-run` + Playwright `_electron` (import real → pipeline de
   análise real → render real). Este é o único artefato deste conjunto que
   passou pela mesma disciplina de "rodar de verdade" do resto do projeto.
-* **macOS Intel (zip, x64)** e **macOS Apple Silicon (zip, arm64)** — ⚠️
-  **gerados com sucesso** (`.app` real dentro de um `.zip`, ~650MB cada,
-  contendo o Electron completo + node_modules + os modelos ONNX), mas **não
-  puderam ser executados neste ambiente** (Linux não roda binários Mach-O).
-  DMG não foi possível gerar (ver abaixo). Sem assinatura de código —
-  usuário final vai precisar liberar no Gatekeeper na primeira execução.
+* **macOS Intel (zip, x64)** — ⚠️ **testado num Mac real (macOS Ventura,
+  Intel) por um usuário**, achou um bug real de verdade (`Cannot find
+  module '...onnxruntime_binding.node'`) — diagnosticado e corrigido (ver
+  "Quinto problema" abaixo). Correção confirmada presente no pacote
+  (arquivo certo agora existe dentro do `.app`), mas a re-execução no Mac
+  real após o fix ainda está pendente de confirmação. Sem assinatura de
+  código — usuário final precisa liberar no Gatekeeper na primeira execução
+  (`xattr -cr caminho/pro/app.app` ou clique-direito → Abrir).
+* **macOS Apple Silicon (zip, arm64)** — ⚠️ gerado com sucesso pelo mesmo
+  processo corrigido, mas **ainda não executado de verdade** num Mac Apple
+  Silicon (só verificado que o arquivo `darwin/arm64` correto está presente
+  no pacote, mesma checagem que expôs o bug do x64).
+* DMG não foi possível gerar a partir daqui (ver "Terceiro problema"
+  abaixo) — só o alvo `zip` está configurado.
 * **Windows (x64)** — ❌ **instalador NSIS não foi possível gerar aqui**
   (ver "Terceiro problema" abaixo). Gerado em vez disso um **fallback real
   e funcional**: `Digify Property Studio-0.1.0-win-x64-portable.zip`, um
@@ -166,6 +174,44 @@ Configurar um ambiente wine completo e funcional estava fora do escopo de
 tempo disponível — o fallback real (zip portátil do `win-unpacked`) cobre
 a necessidade prática (usuário Windows consegue rodar o app) sem essa
 dependência.
+
+## Quinto problema real: `onnxruntime-node` sem binário pra Mac Intel + poda de arquivos
+
+Encontrado só ao rodar o pacote de verdade num Mac Intel real (não
+apareceu em nenhum teste automatizado nem no build em si — o build "passa"
+tranquilamente mesmo com esse bug):
+
+```
+Uncaught Exception:
+Error: Cannot find module '../bin/napi-v6/darwin/x64/onnxruntime_binding.node'
+```
+
+Duas causas reais, sobrepostas:
+
+1. **`onnxruntime-node@1.27.0` parou de publicar o binário pra macOS Intel
+   (`darwin/x64`)** — confirmado inspecionando o conteúdo real do pacote
+   npm (`npm pack onnxruntime-node@1.27.0 --dry-run`): só `darwin/arm64`,
+   `linux/{x64,arm64}` e `win32/{x64,arm64}` estão presentes. Testando
+   versões anteriores, **`onnxruntime-node@1.23.0` é a última que ainda
+   inclui `darwin/x64`** (1.24.0 em diante removeu). Fix:
+   `apps/desktop/package.json` fixa `onnxruntime-node` em `1.23.0` (sem
+   `^`, pra não subir sozinho pra uma versão sem suporte Intel de novo).
+   Verificado com a suíte de testes inteira (133 testes, todos os que
+   usam onnxruntime de verdade — `RoomRecognizeCapability`,
+   `ObjectDetectCapability`, `HomeStagingActCapability`) passando igual
+   com essa versão mais antiga.
+2. **A filtragem padrão de `node_modules` do electron-builder** (aplicada
+   quando `files` não lista `node_modules` explicitamente) também não
+   ajudava — mesmo depois de confirmar que a versão 1.23.0 tem o arquivo
+   certo na origem, adicionamos `node_modules/**/*` explícito em `files`
+   no `electron-builder.yml` como proteção adicional (faz o
+   electron-builder usar correspondência simples de glob em vez de
+   qualquer heurística de poda por pacote/plataforma).
+
+Nenhum teste automatizado pega esse tipo de bug — só existe rodando o
+executável empacotado de verdade na plataforma de destino, exatamente o
+motivo de ter pedido pra alguém testar num Mac Intel real antes de
+considerar esse pacote pronto.
 
 ## Antes de distribuir pra usuários de verdade
 

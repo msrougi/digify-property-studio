@@ -12,6 +12,15 @@ directories:
 files:
   - out/**/*
   - package.json
+  # Precisa ser explícito: sem isso, o electron-builder aplica sua poda
+  # "inteligente" padrão em node_modules — que removeu incorretamente o
+  # binário nativo `onnxruntime-node/bin/napi-v6/darwin/x64/*.node` (a
+  # variante certa pro pacote de Mac Intel!) tanto do pacote x64 quanto do
+  # arm64, causando `Cannot find module '...onnxruntime_binding.node'` ao
+  # abrir o app de verdade. Com o padrão explícito, o electron-builder usa
+  # correspondência simples de glob em vez da poda por heurística — inclui
+  # tudo, sem tentar "adivinhar" o que cada pacote precisa por plataforma.
+  - node_modules/**/*
 
 # asar desabilitado de propósito: os binários reais (ffmpeg-static/
 # ffprobe-static, executados via child_process) e os módulos nativos
