@@ -3,6 +3,11 @@ import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
 import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
 import { EXPORT_PRESETS, type ExportPresetId } from "../infrastructure/export/exportPresets.js";
+import type { StageProgress } from "../application/progress.js";
+
+export interface ProgressEvent extends StageProgress {
+  operationId: string;
+}
 
 export interface ProjectDTO {
   id: string;
@@ -78,10 +83,15 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
-  ipcMain.handle("projects:import", async (_event, filePath: string): Promise<ProjectDTO> => {
-    const { project } = await app.importAndAnalyzeVideo.execute({ filePath });
-    return toProjectDto(project);
-  });
+  ipcMain.handle(
+    "projects:import",
+    async (_event, filePath: string, operationId: string): Promise<ProjectDTO> => {
+      const { project } = await app.importAndAnalyzeVideo.execute({ filePath }, (progress) => {
+        window.webContents.send("progress:import", { operationId, ...progress } satisfies ProgressEvent);
+      });
+      return toProjectDto(project);
+    },
+  );
 
   ipcMain.handle("projects:list", async (): Promise<ProjectDTO[]> => {
     const projects = await app.listProjects.execute();
@@ -122,8 +132,14 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
 
   ipcMain.handle(
     "projects:renderPreview",
-    async (_event, options: RenderPreviewOptions): Promise<RenderPreviewDTO> => {
-      return app.renderPreview.execute(options);
+    async (
+      _event,
+      options: RenderPreviewOptions,
+      operationId: string,
+    ): Promise<RenderPreviewDTO> => {
+      return app.renderPreview.execute(options, (progress) => {
+        window.webContents.send("progress:render", { operationId, ...progress } satisfies ProgressEvent);
+      });
     },
   );
 

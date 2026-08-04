@@ -1,4 +1,5 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { randomUUID } from "node:crypto";
 import type {
   ProjectDTO,
   SceneDTO,
@@ -8,8 +9,27 @@ import type {
   RenderPreviewDTO,
   ExportVideoDTO,
   ExportPresetDTO,
+  ProgressEvent,
 } from "../main/ipc.js";
 import { toMediaUrl } from "../shared/media.js";
+
+/**
+ * Assina um canal de progresso push (`webContents.send`, não
+ * request/response), filtrando pelo `operationId` da chamada em curso —
+ * evita que um evento de uma chamada anterior/abandonada vaze pra um
+ * listener novo. Devolve a função de unsubscribe.
+ */
+function subscribeToProgress(
+  channel: "progress:import" | "progress:render",
+  operationId: string,
+  callback: (progress: Omit<ProgressEvent, "operationId">) => void,
+): () => void {
+  const listener = (_event: IpcRendererEvent, data: ProgressEvent): void => {
+    if (data.operationId === operationId) callback(data);
+  };
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
 
 /**
  * Única superfície exposta ao renderer — nunca expõe Node/fs diretamente
@@ -18,8 +38,20 @@ import { toMediaUrl } from "../shared/media.js";
  */
 const digifyApi = {
   selectVideoFile: (): Promise<string | null> => ipcRenderer.invoke("projects:selectVideoFile"),
-  importVideo: (filePath: string): Promise<ProjectDTO> =>
-    ipcRenderer.invoke("projects:import", filePath),
+  importVideo: async (
+    filePath: string,
+    onProgress?: (progress: Omit<ProgressEvent, "operationId">) => void,
+  ): Promise<ProjectDTO> => {
+    const operationId = randomUUID();
+    const unsubscribe = onProgress
+      ? subscribeToProgress("progress:import", operationId, onProgress)
+      : null;
+    try {
+      return await ipcRenderer.invoke("projects:import", filePath, operationId);
+    } finally {
+      unsubscribe?.();
+    }
+  },
   listProjects: (): Promise<ProjectDTO[]> => ipcRenderer.invoke("projects:list"),
   getScenes: (projectId: string): Promise<SceneDTO[]> =>
     ipcRenderer.invoke("projects:getScenes", projectId),
@@ -27,8 +59,20 @@ const digifyApi = {
     ipcRenderer.invoke("projects:getObjects", projectId),
   getPropertyScore: (projectId: string): Promise<PropertyScoreDTO> =>
     ipcRenderer.invoke("projects:getPropertyScore", projectId),
-  renderPreview: (options: RenderPreviewOptions): Promise<RenderPreviewDTO> =>
-    ipcRenderer.invoke("projects:renderPreview", options),
+  renderPreview: async (
+    options: RenderPreviewOptions,
+    onProgress?: (progress: Omit<ProgressEvent, "operationId">) => void,
+  ): Promise<RenderPreviewDTO> => {
+    const operationId = randomUUID();
+    const unsubscribe = onProgress
+      ? subscribeToProgress("progress:render", operationId, onProgress)
+      : null;
+    try {
+      return await ipcRenderer.invoke("projects:renderPreview", options, operationId);
+    } finally {
+      unsubscribe?.();
+    }
+  },
   selectExportDestination: (suggestedName: string): Promise<string | null> =>
     ipcRenderer.invoke("projects:selectExportDestination", suggestedName),
   exportVideo: (

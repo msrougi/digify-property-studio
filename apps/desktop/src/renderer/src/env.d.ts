@@ -72,14 +72,24 @@ interface ExportPresetDTO {
   description: string;
 }
 
+interface StageProgressDTO {
+  stage: string;
+  stageIndex: number;
+  totalStages: number;
+  percent: number;
+}
+
 interface DigifyApi {
   selectVideoFile(): Promise<string | null>;
-  importVideo(filePath: string): Promise<ProjectDTO>;
+  importVideo(filePath: string, onProgress?: (progress: StageProgressDTO) => void): Promise<ProjectDTO>;
   listProjects(): Promise<ProjectDTO[]>;
   getScenes(projectId: string): Promise<SceneDTO[]>;
   getObjects(projectId: string): Promise<DetectedObjectDTO[]>;
   getPropertyScore(projectId: string): Promise<PropertyScoreDTO>;
-  renderPreview(options: RenderPreviewOptions): Promise<RenderPreviewDTO>;
+  renderPreview(
+    options: RenderPreviewOptions,
+    onProgress?: (progress: StageProgressDTO) => void,
+  ): Promise<RenderPreviewDTO>;
   selectExportDestination(suggestedName: string): Promise<string | null>;
   exportVideo(
     projectId: string,
