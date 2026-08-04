@@ -85,7 +85,11 @@ export function App(): JSX.Element {
       {selectedProject && (
         <section>
           <h2 className="section-title">Melhorias</h2>
-          <RenderPanel projectId={selectedProject.id} projectName={selectedProject.name} />
+          <RenderPanel
+            projectId={selectedProject.id}
+            projectName={selectedProject.name}
+            sourceVideoPath={selectedProject.sourceVideoPath}
+          />
         </section>
       )}
     </div>

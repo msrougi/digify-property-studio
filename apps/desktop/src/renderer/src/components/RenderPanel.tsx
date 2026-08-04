@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { VideoPlayer } from "./VideoPlayer.js";
+import { ProgressBar } from "./ProgressBar.js";
+import { BeforeAfterSlider } from "./BeforeAfterSlider.js";
+import { useElapsedTime } from "../useElapsedTime.js";
 
 interface RenderPanelProps {
   projectId: string;
   projectName: string;
+  sourceVideoPath: string;
 }
 
 const PROFILE_LABEL: Record<ColorProfile, string> = {
@@ -27,13 +30,15 @@ const ORIGINAL_FORMAT_OPTION = "";
  * original ou num preset real de rede social (`docs/00-ARCHITECTURE.md`,
  * seção 11).
  */
-export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.Element {
+export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderPanelProps): JSX.Element {
   const [profile, setProfile] = useState<ColorProfile>("warm");
   const [applySharpen, setApplySharpen] = useState(false);
   const [applyHomeStaging, setApplyHomeStaging] = useState(false);
   const [applyPerspective, setApplyPerspective] = useState(false);
   const [applyReflection, setApplyReflection] = useState(false);
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
+  const [progress, setProgress] = useState<StageProgressDTO | null>(null);
+  const elapsedMs = useElapsedTime(status === "rendering");
   const [result, setResult] = useState<RenderPreviewDTO | null>(null);
   const [exportPresets, setExportPresets] = useState<ExportPresetDTO[]>([]);
   const [exportPresetId, setExportPresetId] = useState<string>(ORIGINAL_FORMAT_OPTION);
@@ -48,17 +53,21 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
 
   async function handleRender(): Promise<void> {
     setStatus("rendering");
+    setProgress(null);
     setExportStatus("idle");
     setExportedPath(null);
     try {
-      const renderResult = await window.digify.renderPreview({
-        projectId,
-        colorProfile: profile,
-        applySharpen,
-        applyHomeStaging,
-        applyPerspective,
-        applyReflection,
-      });
+      const renderResult = await window.digify.renderPreview(
+        {
+          projectId,
+          colorProfile: profile,
+          applySharpen,
+          applyHomeStaging,
+          applyPerspective,
+          applyReflection,
+        },
+        setProgress,
+      );
       setResult(renderResult);
       setStatus("done");
     } catch {
@@ -143,6 +152,16 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
         </button>
       </div>
 
+      {status === "rendering" && progress && (
+        <ProgressBar
+          stage={progress.stage}
+          stageIndex={progress.stageIndex}
+          totalStages={progress.totalStages}
+          percent={progress.percent}
+          elapsedMs={elapsedMs}
+        />
+      )}
+
       {status === "error" && (
         <p style={{ color: "#ff6b6b" }}>Não conseguimos aplicar as melhorias neste vídeo.</p>
       )}
@@ -156,7 +175,7 @@ export function RenderPanel({ projectId, projectName }: RenderPanelProps): JSX.E
             ))}
           </ul>
 
-          <VideoPlayer filePath={result.outputPath} label="Prévia renderizada" />
+          <BeforeAfterSlider beforePath={sourceVideoPath} afterPath={result.outputPath} />
 
           <div className="render-panel__export">
             <select

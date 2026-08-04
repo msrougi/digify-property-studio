@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ProgressBar } from "./ProgressBar.js";
+import { useElapsedTime } from "../useElapsedTime.js";
 
 interface ImportPanelProps {
   onImported: () => void;
@@ -10,14 +12,17 @@ interface ImportPanelProps {
  */
 export function ImportPanel({ onImported }: ImportPanelProps): JSX.Element {
   const [status, setStatus] = useState<"idle" | "importing" | "error">("idle");
+  const [progress, setProgress] = useState<StageProgressDTO | null>(null);
+  const elapsedMs = useElapsedTime(status === "importing");
 
   async function handleImportClick(): Promise<void> {
     const filePath = await window.digify.selectVideoFile();
     if (!filePath) return;
 
     setStatus("importing");
+    setProgress(null);
     try {
-      await window.digify.importVideo(filePath);
+      await window.digify.importVideo(filePath, setProgress);
       onImported();
       setStatus("idle");
     } catch {
@@ -34,6 +39,15 @@ export function ImportPanel({ onImported }: ImportPanelProps): JSX.Element {
       >
         {status === "importing" ? "Importando…" : "Importar vídeo"}
       </button>
+      {status === "importing" && progress && (
+        <ProgressBar
+          stage={progress.stage}
+          stageIndex={progress.stageIndex}
+          totalStages={progress.totalStages}
+          percent={progress.percent}
+          elapsedMs={elapsedMs}
+        />
+      )}
       {status === "error" && (
         <p style={{ color: "#ff6b6b", marginTop: 12 }}>
           Não conseguimos importar este vídeo. Verifique se o arquivo está íntegro ou tente
