@@ -213,6 +213,52 @@ executável empacotado de verdade na plataforma de destino, exatamente o
 motivo de ter pedido pra alguém testar num Mac Intel real antes de
 considerar esse pacote pronto.
 
+## Sexto problema real: crash nativo em `NSPersistentUIManager` ao acordar do sleep
+
+Depois do fix do `onnxruntime-node` acima, o mesmo usuário testou de novo
+no Mac Intel real e o app abriu — mas crashou ~350s depois do Mac acordar
+do modo sleep, com um crash completamente diferente (nativo, não
+JavaScript):
+
+```
+Exception Type:  EXC_BAD_INSTRUCTION (SIGILL)
+Crashed Thread:  0  CrBrowserMain
+0  AppKit  NSPersistentUIRequiresSecureCoding + 90
+1  AppKit  -[NSPersistentUIManager flushAllChanges] + 1400
+...
+Application Specific Information:
+Secure coding for state restoration requested after it was initialized
+without. NSApplicationDelegate was probably established too late.
+```
+
+Esse é um bug real e conhecido de apps Electron no macOS (não específico
+deste projeto): o AppKit tenta persistir/restaurar o estado das janelas do
+app (o mecanismo por trás do "Reabrir janelas ao efetuar login" / restaurar
+janelas depois de acordar do sleep) usando codificação segura
+(`NSSecureCoding`), mas como o delegate do Electron é estabelecido bem mais
+tarde no processo de boot do Chromium do que num app Cocoa nativo, o AppKit
+às vezes já decidiu "sem codificação segura" antes do delegate responder —
+e quando finalmente tenta persistir de verdade (aqui, disparado por um
+evento do sistema depois do wake), a inconsistência crasha o processo.
+
+Electron **não expõe nenhuma API em JavaScript pra controlar isso**
+diretamente (confirmado inspecionando as definições de tipo da versão
+instalada, `electron@33.4.11` — não existe `app.applicationSupportsSecureRestorableState`
+nem nada relacionado a "restorable state" nas typings). A mitigação real
+disponível é via `Info.plist`: `electron-builder.yml` agora usa
+`mac.extendInfo` pra injetar `NSQuitAlwaysKeepsWindows: false`, que diz ao
+macOS pra nunca manter/persistir o estado de janelas desse app entre
+sessões — evitando o caminho de código (`flushAllChanges`) que estava
+crashando. Verificado que a chave chega de verdade no `Info.plist` dentro
+do `.app` gerado (`plutil`/`plistlib` confirmando `NSQuitAlwaysKeepsWindows
+= False`).
+
+**Isto é uma mitigação, não uma correção com causa raiz 100% comprovada**:
+não há como reproduzir esse crash específico (depende de sleep/wake do
+sistema real) neste sandbox Linux, então a eficácia definitiva só será
+confirmada quando o usuário testar de novo no Mac real. Documentado aqui
+com essa ressalva explícita, ao invés de alegar certeza que não existe.
+
 ## Antes de distribuir pra usuários de verdade
 
 Os pacotes Mac/Windows **nunca foram executados** — só o processo de build

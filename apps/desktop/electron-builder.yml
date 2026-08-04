@@ -61,6 +61,16 @@ mac:
         - x64
         - arm64
   category: public.app-category.video
+  # Mitigação pro crash real EXC_BAD_INSTRUCTION dentro de
+  # `-[NSPersistentUIManager flushAllChanges]` (achado rodando de verdade
+  # num Mac Intel, macOS Ventura, ~350s depois do Mac acordar do sleep) —
+  # ver "Sexto problema real" em docs/PACKAGING.md. `NSQuitAlwaysKeepsWindows:
+  # false` diz ao macOS pra nunca persistir estado de janela pra esse app,
+  # evitando o caminho de código que crasha. Electron não expõe controle
+  # disso via API JS (não existe `app.applicationSupportsSecureRestorableState`
+  # nas typings da versão instalada) — só dá pra ajustar via Info.plist.
+  extendInfo:
+    NSQuitAlwaysKeepsWindows: false
 
 # win: NSIS precisa de `wine` funcional pra cross-compilar de Linux — neste
 # ambiente, mesmo com wine64 instalado, o passo final falha
