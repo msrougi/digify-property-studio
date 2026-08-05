@@ -20,6 +20,7 @@ import { IntakeCapability } from "./capabilities/IntakeCapability.js";
 import { SceneDetectCapability } from "./capabilities/SceneDetectCapability.js";
 import { RoomRecognizeCapability } from "./capabilities/RoomRecognizeCapability.js";
 import { ObjectDetectCapability } from "./capabilities/ObjectDetectCapability.js";
+import { ClutterDetectCapability } from "./capabilities/ClutterDetectCapability.js";
 import { PropertyScoreCapability } from "./capabilities/PropertyScoreCapability.js";
 import { LightingAnalyzeCapability } from "./capabilities/LightingAnalyzeCapability.js";
 import { LightingActCapability } from "./capabilities/LightingActCapability.js";
@@ -52,6 +53,7 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
     ),
   );
   registry.register(new ObjectDetectCapability(join(modelsDir, "yolox_nano.onnx")));
+  registry.register(new ClutterDetectCapability());
   registry.register(new PropertyScoreCapability());
   registry.register(new LightingAnalyzeCapability());
   registry.register(new LightingActCapability());

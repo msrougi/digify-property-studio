@@ -15,6 +15,7 @@ import { IntakeCapability } from "../../infrastructure/capabilities/IntakeCapabi
 import { SceneDetectCapability } from "../../infrastructure/capabilities/SceneDetectCapability.js";
 import { RoomRecognizeCapability } from "../../infrastructure/capabilities/RoomRecognizeCapability.js";
 import { ObjectDetectCapability } from "../../infrastructure/capabilities/ObjectDetectCapability.js";
+import { ClutterDetectCapability } from "../../infrastructure/capabilities/ClutterDetectCapability.js";
 import { LightingAnalyzeCapability } from "../../infrastructure/capabilities/LightingAnalyzeCapability.js";
 import { PropertyScoreCapability } from "../../infrastructure/capabilities/PropertyScoreCapability.js";
 import { ImportVideoUseCase } from "../ImportVideoUseCase.js";
@@ -58,6 +59,7 @@ describe("ImportAndAnalyzeVideoUseCase", () => {
       ),
     );
     registry.register(new ObjectDetectCapability(join(MODELS_DIR, "yolox_nano.onnx")));
+    registry.register(new ClutterDetectCapability());
     registry.register(new LightingAnalyzeCapability());
     registry.register(new PropertyScoreCapability());
     const pie = new PropertyIntelligenceEngine(registry, new EventBus());
@@ -118,6 +120,7 @@ describe("ImportAndAnalyzeVideoUseCase", () => {
       ),
     );
     registry.register(new ObjectDetectCapability(join(MODELS_DIR, "yolox_nano.onnx")));
+    registry.register(new ClutterDetectCapability());
     registry.register(new LightingAnalyzeCapability());
     registry.register(new PropertyScoreCapability());
     const pie = new PropertyIntelligenceEngine(registry, new EventBus());
