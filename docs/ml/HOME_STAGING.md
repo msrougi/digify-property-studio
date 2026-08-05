@@ -146,7 +146,57 @@ frame, descrita abaixo, seria mais completa) mas é real, honesta e resolve
 o sintoma mais grave (o "adesivo" óbvio) com custo de implementação e
 performance viáveis agora.
 
-## Conflito real: `onnxruntime-node` fixado em 1.23.0 (Mac Intel) impede o LaMa de carregar
+## RESOLVIDO: o conflito Mac Intel × LaMa (corrigindo o modelo, não o runtime)
+
+**Status: resolvido.** A seção abaixo descreve o impasse original; esta
+descreve a solução real, já aplicada e verificada.
+
+O impasse era: `onnxruntime-node` <=1.23.x é a última linha com binário pra
+macOS Intel, mas rejeita os nós `DFT(inverse=1, onesided=1)` que o LaMa gera
+nas suas Fast Fourier Convolutions. As versões que corrigem esse bug
+removeram o binário Intel. Confirmado que **nenhuma** versão publicada
+serve pras duas coisas — inclusive a 1.23.2, que eu testei depois e tem
+binário Intel mas mantém o mesmo bug.
+
+**A saída foi parar de esperar um runtime e corrigir o próprio modelo.** O
+`irfft` (o que aquela combinação de atributos representa) pode ser escrito
+com operações que o runtime antigo aceita, sem mudar a matemática:
+
+```
+irfft(X, n)  ==  real( idft( hermitian_full(X, n), n ) )
+```
+
+onde `hermitian_full` reconstrói o espectro completo a partir do "onesided"
+usando a simetria hermitiana de um sinal real (`X_full[k] = conj(X[n-k])`).
+`tools/inpainting/patch_dft_irfft.py` aplica essa reescrita nos 36 nós
+afetados, com comprimento `n` dinâmico (via Shape/Range/Gather — nenhuma
+resolução fixa é assumida, o modelo continua aceitando qualquer tamanho).
+
+A semântica exata de `DFT(inverse=1, onesided=1)` (entrada `[..., M, 2]` →
+saída `[..., n, 1]`, equivalente a `numpy.fft.irfft`) foi determinada
+**empiricamente contra um runtime que a suporta**, não deduzida da
+especificação — a documentação do operador não deixa isso explícito.
+
+### Verificação
+
+* Modelo corrigido × original, mesmo runtime moderno, duas resoluções
+  diferentes (256 e 320): diferença máxima **0.000e+00** — bit a bit
+  idêntico, não "aproximadamente igual".
+* Modelo corrigido **carrega e roda inferência real** no
+  `onnxruntime-node@1.23.0` (a versão com binário Mac Intel), com saída
+  também bit a bit idêntica à referência.
+* `HomeStagingActCapability.test.ts` agora **exige** `usedRealInpainting`
+  — se isso regredir, o teste quebra em vez de degradar em silêncio pro
+  `delogo`.
+
+### Efeito prático
+
+Home Staging usa inpainting generativo real (LaMa) em Mac Intel, Apple
+Silicon, Linux e Windows — sem sidecar, sem duas versões de runtime, sem
+processo separado. `onnxruntime-node` segue fixado em 1.23.0 (o app abre
+em Intel) e o modelo carrega normalmente.
+
+## O impasse original (histórico): `onnxruntime-node` 1.23.0 × LaMa
 
 Descoberto investigando o mesmo relato acima: além do problema de câmera
 em movimento, o modelo LaMa **não carrega de jeito nenhum** com a versão
@@ -183,24 +233,21 @@ prometida). Isso é diferente do problema de câmera em movimento acima —
 mesmo numa cena 100% estática, o resultado no Mac Intel hoje é sempre
 `delogo`, nunca o LaMa real.
 
-**Não resolvido ainda** — as opções reais consideradas:
+As opções consideradas na época, e o que aconteceu com cada uma:
 
-1. Manter `onnxruntime-node@1.23.0` (o app nem abre sem isso no Mac Intel
-   — bloqueio bem mais grave que uma feature degradada) e aceitar que o
-   LaMa real fica indisponível nessa plataforma até a Microsoft restaurar
-   o binário `darwin/x64` numa versão futura que já tenha o fix do DFT.
-2. Descobrir a versão exata (entre 1.24.0 e 1.27.0) onde o bug do DFT foi
-   corrigido e verificar se, por acaso, alguma versão nesse intervalo
-   também restaurou `darwin/x64` — não verificado ainda, mas a pesquisa
-   anterior (`docs/PACKAGING.md`) já checou 1.24.0/1.25.1/1.26.0/1.27.0 e
-   nenhuma tinha `darwin/x64`, então é improvável.
-3. Rodar duas versões de `onnxruntime-node` lado a lado (uma pro app
-   Electron via IPC/binário nativo, outra isolada só pra inferência do
-   LaMa, ex. via processo filho) — tecnicamente possível, mas complexidade
-   real alta pra um ganho ainda incerto.
+1. Aceitar a degradação em Mac Intel até a Microsoft republicar o binário
+   `darwin/x64` numa versão com o fix — foi o estado por um tempo.
+2. Procurar uma versão que tivesse as duas coisas. **Verificado depois:
+   não existe.** Além de 1.24.0/1.25.1/1.26.0/1.27.0 (nenhuma com
+   `darwin/x64`), testei a 1.23.2 — essa TEM binário Intel, mas mantém o
+   mesmo bug do DFT.
+3. Rodar duas versões lado a lado (sidecar). **Verificado: não funciona
+   pra esse caso.** A 1.27.0 só publica `darwin/arm64`, então um processo
+   separado usando ela continuaria sem rodar em Mac Intel.
 
-Opção 1 é a que está em produção agora — escolhida porque um app que não
-abre é estritamente pior que uma feature usando o fallback clássico.
+Nenhuma das três resolvia. A saída real foi uma quarta opção, que não
+estava nesta lista: **corrigir o modelo em vez do runtime** — ver a seção
+"RESOLVIDO" no topo.
 
 ## Caminho futuro
 

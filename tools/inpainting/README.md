@@ -19,7 +19,18 @@ pip install -r requirements.txt
 python3 download_model.py   # baixa + verifica MD5 de big-lama.pt (~196MB)
 python3 export_onnx.py      # TorchScript -> ExportedProgram -> ONNX
 python3 verify_onnx.py      # confere saída idêntica ao TorchScript em várias resoluções
+
+# OBRIGATÓRIO: sem este passo o modelo não carrega em macOS Intel.
+python3 patch_dft_irfft.py models/lama_inpainting.onnx models/lama_inpainting.onnx
 ```
+
+⚠️ **Não pule o `patch_dft_irfft.py`.** O ONNX recém-exportado usa nós
+`DFT(inverse=1, onesided=1)`, que o `onnxruntime-node` <=1.23.x rejeita ao
+carregar — e essa é a última linha que ainda publica binário pra macOS
+Intel. Sem o patch, Home Staging degrada silenciosamente pro `delogo`
+nessa plataforma. O script reescreve esses nós com matemática equivalente
+(saída bit a bit idêntica, verificada). Ver "O bug de shape inference do
+DFT" abaixo e `docs/ml/HOME_STAGING.md`.
 
 Resultado: `models/lama_inpainting.onnx` (~196MB — não versionado no git, ver
 "Por que o .onnx não está no repositório" abaixo). Copie manualmente para
@@ -72,6 +83,49 @@ em 4 resoluções diferentes por `verify_onnx.py`.
 Custo do workaround: inferência mais lenta (grafo não otimizado/fundido).
 Aceitável aqui porque `home_staging.act` roda uma vez por cena (frame
 representativo), não por frame de vídeo.
+
+## O bug de shape inference do DFT (e por que o `patch_dft_irfft.py` existe)
+
+Segundo bug real de runtime, diferente do anterior — este impede o modelo
+de **carregar**, não de rodar:
+
+```
+Load model from lama_inpainting.onnx failed:
+Node (node_DFT_2630) Op (DFT) [ShapeInferenceError]
+is_onesided and inverse attributes cannot be enabled at the same time
+```
+
+O LaMa gera 36 nós `DFT(inverse=1, onesided=1)` — o `irfft` de cada bloco
+de Fast Fourier Convolution. Essa combinação é válida na especificação do
+ONNX (é o IRFFT), mas a inferência de shape do ONNX Runtime <=1.23.x a
+rejeita. Isso importa muito porque **1.23.x é a última linha que ainda
+publica binário pra macOS Intel** (`darwin/x64`) — as versões que
+corrigem o bug do DFT removeram esse binário. Verificado que nenhuma
+versão publicada tem as duas coisas, incluindo a 1.23.2 (tem Intel, mantém
+o bug), e que um sidecar com a 1.27.0 também não resolveria (ela só
+publica `darwin/arm64`).
+
+**Solução: corrigir o modelo, não esperar o runtime.** `patch_dft_irfft.py`
+reescreve cada nó afetado usando a identidade
+
+```
+irfft(X, n)  ==  real( idft( hermitian_full(X, n), n ) )
+```
+
+com `hermitian_full` reconstruindo o espectro completo a partir do
+"onesided" via simetria hermitiana (`X_full[k] = conj(X[n-k])`). Só usa
+operações que o runtime antigo aceita, e mantém `n` dinâmico
+(Shape/Range/Gather) — o modelo continua aceitando qualquer resolução.
+
+A semântica exata do operador (entrada `[..., M, 2]` → saída
+`[..., n, 1]`, igual a `numpy.fft.irfft`) foi determinada **empiricamente
+contra um runtime que a suporta**, não deduzida da documentação — a
+especificação não deixa a forma da saída explícita.
+
+Verificado: saída do modelo corrigido × original, no mesmo runtime
+moderno, em duas resoluções — diferença máxima **0.000e+00** (bit a bit
+idêntico); e o corrigido carrega + roda inferência real no
+`onnxruntime-node@1.23.0`, também com diferença zero.
 
 ## Por que o `.onnx` não está no repositório
 

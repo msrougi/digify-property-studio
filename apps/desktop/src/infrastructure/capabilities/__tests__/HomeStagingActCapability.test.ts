@@ -82,17 +82,19 @@ describe("HomeStagingActCapability (sem modelo real disponível — caminho fall
 });
 
 describe.skipIf(!hasRealModel)("HomeStagingActCapability (com modelo LaMa real disponível)", () => {
-  // NOTA: onnxruntime-node <=1.23.0 (fixado nesta versão por causa de um bug
-  // real de suporte a macOS Intel, ver docs/PACKAGING.md) tem um bug próprio
-  // de shape inference que impede o modelo LaMa de carregar ("is_onesided
-  // and inverse attributes cannot be enabled at the same time" no nó DFT) —
-  // confirmado carregando o MESMO .onnx com sucesso na v1.27.0 e falhando na
-  // v1.23.0. Ver docs/ml/HOME_STAGING.md, "Conflito real". Por isso este
-  // teste aceita os dois desfechos possíveis (sucesso real ou fallback
-  // gracioso) em vez de exigir sucesso — continua validando que a tentativa
-  // de verdade acontece (não é suprimida pelo gate de movimento) e que, se
-  // falhar, cai pro delogo sem quebrar nada.
-  it("tenta inpainting real quando a cena é estática — sucesso real OU fallback gracioso, nunca quebra", async () => {
+  // Este teste EXIGE inpainting real (não aceita mais o fallback como
+  // desfecho válido). Versões anteriores aceitavam os dois porque o
+  // onnxruntime-node <=1.23.x — a última linha com binário pra macOS Intel —
+  // rejeita, na inferência de shape, os nós DFT(inverse=1, onesided=1) que o
+  // LaMa gera nas suas Fast Fourier Convolutions, e o modelo simplesmente não
+  // carregava. Isso foi resolvido reescrevendo o MODELO (não esperando um
+  // runtime novo): `tools/inpainting/patch_dft_irfft.py` troca esses nós por
+  // uma construção equivalente que o runtime antigo aceita — saída idêntica
+  // bit a bit, verificada contra o modelo original num runtime moderno. Ver
+  // docs/ml/HOME_STAGING.md. Se algum dia isso regredir (modelo reexportado
+  // sem o patch, por exemplo), este teste falha em vez de degradar em
+  // silêncio pro delogo.
+  it("usa inpainting real (LaMa) quando a cena é estática", async () => {
     const result = await new HomeStagingActCapability(REAL_MODEL_PATH).execute({
       ...BASE_INPUT,
       filePath: REAL_VIDEO_PATH,
@@ -100,13 +102,9 @@ describe.skipIf(!hasRealModel)("HomeStagingActCapability (com modelo LaMa real d
       sceneIsStatic: true,
     });
 
-    if (result.output.usedRealInpainting) {
-      expect(result.output.overlay).not.toBeNull();
-    } else {
-      expect(result.output.overlay).toBeNull();
-      expect(result.output.legacyFilters.length).toBe(1);
-      expect(result.output.description).toContain("Inpainting real falhou");
-    }
+    expect(result.output.usedRealInpainting).toBe(true);
+    expect(result.output.overlay).not.toBeNull();
+    expect(result.output.legacyFilters).toHaveLength(0);
   }, 30000);
 
   it("cai pro fallback delogo quando a câmera está em movimento na cena, mesmo com o modelo real disponível — overlay estático de um frame só ficaria descolado do vídeo", async () => {
