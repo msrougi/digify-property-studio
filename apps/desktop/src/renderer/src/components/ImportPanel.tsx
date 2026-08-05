@@ -25,7 +25,8 @@ export function ImportPanel({ onImported }: ImportPanelProps): JSX.Element {
       await window.digify.importVideo(filePath, setProgress);
       onImported();
       setStatus("idle");
-    } catch {
+    } catch (error) {
+      console.error(error);
       setStatus("error");
     }
   }

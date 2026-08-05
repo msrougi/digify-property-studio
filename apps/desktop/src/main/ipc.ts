@@ -70,12 +70,40 @@ export interface ExportPresetDTO {
 }
 
 /**
+ * Loga o erro real no terminal (stdout do processo main, sempre visível
+ * rodando o app empacotado direto por linha de comando) antes de deixar a
+ * exception seguir pro renderer via rejeição do `invoke` — sem isso, um
+ * erro real só aparecia no DevTools do renderer (que ninguém abre rodando
+ * o app empacotado de verdade), fazendo qualquer falha real parecer
+ * silenciosa/impossível de diagnosticar. Bug real: um usuário reportou
+ * "Não conseguimos aplicar as melhorias" sem nenhum jeito de ver por quê.
+ */
+function logIpcError(channel: string, error: unknown): void {
+  console.error(`[ipc:${channel}] falhou:`, error instanceof Error ? error.stack ?? error.message : error);
+}
+
+/** `ipcMain.handle` com log automático de qualquer exception — ver `logIpcError`. */
+function handle<Args extends unknown[], R>(
+  channel: string,
+  fn: (event: Electron.IpcMainInvokeEvent, ...args: Args) => Promise<R> | R,
+): void {
+  ipcMain.handle(channel, async (event, ...args: Args) => {
+    try {
+      return await fn(event, ...args);
+    } catch (error) {
+      logIpcError(channel, error);
+      throw error;
+    }
+  });
+}
+
+/**
  * Toda comunicação renderer -> main passa por aqui, nunca acesso direto a
  * Node/filesystem a partir do renderer (docs/reference/original-docs/18 -
  * Security Architecture.md, "Least Privilege").
  */
 export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void {
-  ipcMain.handle("projects:selectVideoFile", async () => {
+  handle("projects:selectVideoFile", async () => {
     const result = await dialog.showOpenDialog(window, {
       properties: ["openFile"],
       filters: [{ name: "Vídeos", extensions: ["mp4", "mov", "hevc"] }],
@@ -83,7 +111,7 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
-  ipcMain.handle(
+  handle(
     "projects:import",
     async (_event, filePath: string, operationId: string): Promise<ProjectDTO> => {
       const { project } = await app.importAndAnalyzeVideo.execute({ filePath }, (progress) => {
@@ -93,17 +121,17 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     },
   );
 
-  ipcMain.handle("projects:list", async (): Promise<ProjectDTO[]> => {
+  handle("projects:list", async (): Promise<ProjectDTO[]> => {
     const projects = await app.listProjects.execute();
     return projects.map(toProjectDto);
   });
 
-  ipcMain.handle("projects:getScenes", async (_event, projectId: string): Promise<SceneDTO[]> => {
+  handle("projects:getScenes", async (_event, projectId: string): Promise<SceneDTO[]> => {
     const scenes = await app.sceneRepository.findByProject(projectId);
     return scenes.map(toSceneDto);
   });
 
-  ipcMain.handle(
+  handle(
     "projects:getObjects",
     async (_event, projectId: string): Promise<DetectedObjectDTO[]> => {
       const scenes = await app.sceneRepository.findByProject(projectId);
@@ -116,7 +144,7 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     },
   );
 
-  ipcMain.handle(
+  handle(
     "projects:getPropertyScore",
     async (_event, projectId: string): Promise<PropertyScoreDTO> => {
       const project = await app.projectRepository.findById(projectId);
@@ -130,7 +158,7 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     },
   );
 
-  ipcMain.handle(
+  handle(
     "projects:renderPreview",
     async (
       _event,
@@ -143,7 +171,7 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     },
   );
 
-  ipcMain.handle(
+  handle(
     "projects:selectExportDestination",
     async (_event, suggestedName: string): Promise<string | null> => {
       const result = await dialog.showSaveDialog(window, {
@@ -154,7 +182,7 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     },
   );
 
-  ipcMain.handle(
+  handle(
     "projects:exportVideo",
     async (
       _event,
@@ -173,7 +201,7 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     },
   );
 
-  ipcMain.handle("projects:getExportPresets", (): ExportPresetDTO[] => {
+  handle("projects:getExportPresets", (): ExportPresetDTO[] => {
     return Object.values(EXPORT_PRESETS).map((preset) => ({
       id: preset.id,
       label: preset.label,

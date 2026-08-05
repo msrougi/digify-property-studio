@@ -70,7 +70,8 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
       );
       setResult(renderResult);
       setStatus("done");
-    } catch {
+    } catch (error) {
+      console.error(error);
       setStatus("error");
     }
   }
@@ -91,7 +92,8 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
       );
       setExportedPath(exportResult.destinationPath);
       setExportStatus("done");
-    } catch {
+    } catch (error) {
+      console.error(error);
       setExportStatus("error");
     }
   }
