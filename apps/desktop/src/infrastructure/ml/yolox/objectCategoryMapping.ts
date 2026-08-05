@@ -28,20 +28,22 @@ const CATEGORY_BY_COCO_CLASS: Record<CocoClass, ObjectCategory> = {
   toaster: "decorative",
   bench: "decorative",
 
-  // Decoração fixa.
-  "potted plant": "decorative",
-  vase: "decorative",
-  clock: "decorative",
-  book: "decorative",
-  "teddy bear": "decorative",
-
-  // Eletrônicos de valor — luxury.
-  tv: "luxury",
-  laptop: "luxury",
-  "wine glass": "luxury",
-  skis: "luxury",
-  snowboard: "luxury",
-  surfboard: "luxury",
+  // Decoração solta / eletrônicos / itens de valor — não são móvel nem
+  // eletrodoméstico fixo, então contam como candidatos reais a remoção
+  // (pedido explícito: só móvel e eletrodoméstico ficam protegidos, "o que
+  // não pode é mostrar a mais" — nunca inventa conteúdo, só decide o que
+  // pode ser candidato a remoção real).
+  "potted plant": "temporary",
+  vase: "temporary",
+  clock: "temporary",
+  book: "temporary",
+  "teddy bear": "temporary",
+  tv: "temporary",
+  laptop: "temporary",
+  "wine glass": "temporary",
+  skis: "temporary",
+  snowboard: "temporary",
+  surfboard: "temporary",
 
   // Pertences pessoais / bagunça temporária — candidatos reais a remoção.
   backpack: "temporary",

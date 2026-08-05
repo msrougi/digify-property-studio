@@ -32,13 +32,13 @@ export class DetectObjectsUseCase {
 
     for (const scene of input.scenes) {
       const sceneProps = scene.toProps();
-      const midpointMs = Math.round((sceneProps.startMs + sceneProps.endMs) / 2);
 
       const result = await this.pie.run<ObjectDetectInput, ObjectDetectOutput>(
         "object.detect",
         {
           filePath: input.filePath,
-          atMs: midpointMs,
+          sceneStartMs: sceneProps.startMs,
+          sceneEndMs: sceneProps.endMs,
           frameWidth: input.frameWidth,
           frameHeight: input.frameHeight,
         },

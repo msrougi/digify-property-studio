@@ -14,7 +14,8 @@ describe("ObjectDetectCapability", () => {
     const capability = new ObjectDetectCapability(MODEL_PATH);
     const result = await capability.execute({
       filePath: join(FIXTURES_DIR, "kitchen-sample.mp4"),
-      atMs: 200,
+      sceneStartMs: 0,
+      sceneEndMs: 1000,
       frameWidth: FRAME_WIDTH,
       frameHeight: FRAME_HEIGHT,
     });
@@ -30,7 +31,8 @@ describe("ObjectDetectCapability", () => {
     const capability = new ObjectDetectCapability(MODEL_PATH);
     const result = await capability.execute({
       filePath: join(FIXTURES_DIR, "bathroom-sample.mp4"),
-      atMs: 200,
+      sceneStartMs: 0,
+      sceneEndMs: 1000,
       frameWidth: FRAME_WIDTH,
       frameHeight: FRAME_HEIGHT,
     });
@@ -43,7 +45,8 @@ describe("ObjectDetectCapability", () => {
     const capability = new ObjectDetectCapability(MODEL_PATH);
     const result = await capability.execute({
       filePath: join(FIXTURES_DIR, "kitchen-sample.mp4"),
-      atMs: 200,
+      sceneStartMs: 0,
+      sceneEndMs: 1000,
       frameWidth: FRAME_WIDTH,
       frameHeight: FRAME_HEIGHT,
     });
@@ -61,7 +64,8 @@ describe("ObjectDetectCapability", () => {
     const capability = new ObjectDetectCapability(MODEL_PATH);
     const result = await capability.execute({
       filePath: join(FIXTURES_DIR, "kitchen-sample.mp4"),
-      atMs: 200,
+      sceneStartMs: 0,
+      sceneEndMs: 1000,
       frameWidth: FRAME_WIDTH,
       frameHeight: FRAME_HEIGHT,
     });
