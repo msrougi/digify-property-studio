@@ -449,6 +449,10 @@ body {
   inset: 0;
   height: 100%;
   overflow: hidden;
+  /* Fica POR CIMA do vídeo "depois" (é o que o divisor revela), então
+     precisa ser transparente a cliques — senão engole os controles
+     nativos na metade esquerda. */
+  pointer-events: none;
 }
 
 .before-after__before-clip .before-after__video--before {
@@ -468,6 +472,9 @@ body {
   transform: translateX(-1px);
 }
 
+/* Pode cobrir o quadro inteiro: os controles de reprodução agora são
+   nossos e ficam FORA do palco (`.before-after__controls`), então não há
+   mais nada embaixo desta camada pra ser bloqueado. */
 .before-after__handle {
   position: absolute;
   inset: 0;
@@ -478,6 +485,66 @@ body {
   -webkit-appearance: none;
   background: transparent;
   cursor: ew-resize;
+}
+
+.before-after__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.before-after__play {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--accent), #3f68e0);
+  color: white;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(79, 124, 255, 0.35);
+  transition: transform 0.1s ease-out;
+}
+
+.before-after__play:hover {
+  transform: scale(1.06);
+}
+
+.before-after__play:active {
+  transform: scale(1);
+}
+
+.before-after__seek {
+  flex: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+}
+
+.before-after__seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid var(--accent);
+  cursor: pointer;
+}
+
+.before-after__time {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .before-after__handle::-webkit-slider-runnable-track {
