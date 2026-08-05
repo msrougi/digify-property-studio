@@ -127,15 +127,46 @@ moderno, em duas resoluções — diferença máxima **0.000e+00** (bit a bit
 idêntico); e o corrigido carrega + roda inferência real no
 `onnxruntime-node@1.23.0`, também com diferença zero.
 
-## Por que o `.onnx` não está no repositório
+## Distribuição: o modelo vai versionado em partes
+
+O `.onnx` montado (~196MB) não cabe no limite de 100MB por arquivo do
+GitHub. Antes isso significava que **quem clonava o repositório não tinha o
+modelo** — e `HomeStagingActCapability` caía no fallback `delogo` sem
+alarde nenhum, fazendo o inpainting generativo parecer simplesmente "não
+funcionar" (foi exatamente o que aconteceu na prática com um usuário).
+
+Solução: `split_model.py` quebra o arquivo em partes de 80MB, que **são**
+versionadas em `apps/desktop/models/lama_inpainting.onnx.parts/`, junto de
+um `manifest.json` com o SHA-256 do arquivo completo.
+`apps/desktop/scripts/assemble-models.mjs` remonta automaticamente no
+`dev`/`build`/`build:installer`/`test` — idempotente (pula se já está
+íntegro) e sempre validando o hash, então parte faltando ou corrompida
+falha alto em vez de gerar um `.onnx` silenciosamente inválido.
+
+Na prática: `git clone` + `pnpm install` + build já entrega inpainting real,
+sem nenhum passo manual e sem precisar de Python/PyTorch.
+
+Regenerou o modelo? Rode o split de novo antes de commitar:
+
+```bash
+python3 split_model.py ../../apps/desktop/models/lama_inpainting.onnx
+```
+
+## Por que o `.onnx` montado não é versionado direto
 
 `lama_inpainting.onnx` tem ~196MB — acima do limite de 100MB por arquivo do
-GitHub. Diferente de `mobilenetv2-12.onnx`/`room_classifier_head.onnx`/
-`yolox_nano.onnx` (pequenos, versionados em `apps/desktop/models/`), este
-precisa ser gerado localmente (ou baixado/reexportado via este pipeline)
-antes de rodar o app com inpainting real — `HomeStagingActCapability`
-detecta a ausência do arquivo e usa o fallback `delogo` automaticamente,
-nunca quebra.
+GitHub, por isso ele é ignorado no git e só as partes entram (seção acima).
+Diferente de `mobilenetv2-12.onnx`/`room_classifier_head.onnx`/
+`yolox_nano.onnx`, que são pequenos e versionados inteiros em
+`apps/desktop/models/`.
+
+Rodar este pipeline (download + export + patch) só é necessário pra
+**regenerar** o modelo do zero. Pra apenas usar o app, a remontagem
+automática das partes já basta.
+
+Se por algum motivo nem o `.onnx` nem as partes estiverem presentes,
+`HomeStagingActCapability` detecta a ausência e usa o fallback `delogo`
+automaticamente — nunca quebra o render.
 
 ## Licença
 

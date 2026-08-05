@@ -1,19 +1,21 @@
 {
   "name": "@digify/desktop",
   "version": "0.1.0",
-  "description": "Digify Property Studio — plataforma de vídeo imobiliário com IA (PIE™).",
+  "description": "Digify Property Studio \u2014 plataforma de v\u00eddeo imobili\u00e1rio com IA (PIE\u2122).",
   "author": "Digify Property Studio",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "build:installer": "electron-vite build && node scripts/fix-native-abi.mjs && electron-builder",
+    "dev": "node scripts/assemble-models.mjs && electron-vite dev",
+    "build": "node scripts/assemble-models.mjs && electron-vite build",
+    "build:installer": "node scripts/assemble-models.mjs && electron-vite build && node scripts/fix-native-abi.mjs && electron-builder",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
-    "rebuild:node": "pnpm rebuild better-sqlite3"
+    "rebuild:node": "pnpm rebuild better-sqlite3",
+    "assemble:models": "node scripts/assemble-models.mjs",
+    "pretest": "node scripts/assemble-models.mjs"
   },
   "dependencies": {
     "@digify/database": "workspace:*",

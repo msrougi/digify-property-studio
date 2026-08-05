@@ -83,14 +83,22 @@ o objetivo aqui é corretude, não o menor tamanho de distribuição possível.
 pacote final (fora de qualquer archive) — e `src/main/index.ts` resolve
 `modelsDir` condicionalmente: `process.resourcesPath + "/models"` quando
 `app.isPackaged`, ou o caminho de dev (`out/main/../../models`) caso
-contrário. Os modelos (~220MB total, incluindo o `lama_inpainting.onnx` de
-inpainting real) não são versionados no git (acima do limite de 100MB do
-GitHub por arquivo — ver `tools/*/README.md` pra como regenerá-los), mas
-**são incluídos no instalador** — quem gera o pacote a partir de um clone
-com os modelos já presentes localmente (rodando os scripts de
-`tools/inpainting/`, `tools/room-classifier/`, `tools/object-detector/`)
-entrega um instalador com IA real completa, incluindo inpainting
-generativo.
+contrário. Todos os modelos vão **incluídos no instalador**, e todos vêm
+do próprio repositório — nenhum passo manual é necessário:
+
+* `mobilenetv2-12.onnx`, `room_classifier_head.onnx`, `yolox_nano.onnx` —
+  pequenos, versionados inteiros.
+* `lama_inpainting.onnx` (~196MB, inpainting generativo real) — acima do
+  limite de 100MB por arquivo do GitHub, então é versionado **em partes**
+  de 80MB (`models/lama_inpainting.onnx.parts/`). O script
+  `scripts/assemble-models.mjs` roda no início de `build:installer`
+  (também em `dev`/`build`/`test`) e remonta o arquivo validando SHA-256
+  antes do electron-builder empacotar.
+
+Ou seja: `git clone` + `pnpm install` + `pnpm build:installer` gera um
+instalador com IA real completa, incluindo inpainting generativo — sem
+precisar rodar os scripts de `tools/` nem instalar Python/PyTorch (esses
+só são necessários pra *regenerar* os modelos do zero).
 
 ## Verificação real feita
 

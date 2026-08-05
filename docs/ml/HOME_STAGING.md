@@ -77,16 +77,25 @@ Pixels fora da máscara do objeto ficam bit-a-bit idênticos ao original
 — só a região do objeto muda, o resto do recorte é seguro pra compor de
 volta sem alterar nada ao redor.
 
-## Fallback honesto quando o modelo não está disponível
+## Como o modelo chega em quem clona o repositório
 
 `lama_inpainting.onnx` tem ~196MB — acima do limite de 100MB por arquivo do
-GitHub, então **não é versionado no repositório** (ver
-`tools/inpainting/README.md` pra gerar localmente). Sem o arquivo,
-`HomeStagingActCapability` cai automaticamente no fallback clássico
-`delogo` (interpolação de vizinhança) documentado antes — real, mas
-inferior ao inpainting generativo. O mesmo vale se a inferência falhar por
-qualquer motivo real (memória, resolução extrema): nunca quebra o render
-inteiro, sempre cai pro fallback.
+GitHub. Durante um tempo isso significou que **quem clonava simplesmente
+não tinha o modelo**, e o app caía no `delogo` sem avisar — na prática, o
+inpainting generativo parecia não funcionar (foi o que aconteceu com um
+usuário real testando).
+
+Resolvido: o arquivo é versionado **em partes** de 80MB
+(`apps/desktop/models/lama_inpainting.onnx.parts/`, geradas por
+`tools/inpainting/split_model.py`), e `apps/desktop/scripts/assemble-models.mjs`
+remonta automaticamente no `dev`/`build`/`build:installer`/`test`,
+validando SHA-256. Um `git clone` + `pnpm install` + build já entrega
+inpainting real, sem passo manual e sem precisar de Python/PyTorch.
+
+O fallback `delogo` continua existindo pros casos em que ele realmente
+faz sentido: arquivo ausente por algum motivo, inferência falhando
+(memória, resolução extrema) ou câmera em movimento na cena (ver seção
+abaixo). Nunca quebra o render inteiro.
 
 ## Decisão de confidence
 
@@ -108,13 +117,13 @@ de conteúdo — o usuário sempre confirma antes de aplicar.
 * `RenderingEngine`: teste real de composição de overlay (patch branco
   sobre vídeo preto), confirmando via medição de luma que o overlay aparece
   só na região e janela de tempo certas.
-* Suite completa: 100+ testes automatizados cobrindo cada peça pura
-  (tensores, máscara, união de caixas, recorte, PNG) sem precisar do
-  modelo de 196MB — só o fallback `delogo` roda em CI/`pnpm test`, já que o
-  modelo não está versionado. A inferência real em si não tem cobertura
-  automatizada permanente (não dá pra versionar o modelo) — verificada
-  manualmente nesta sessão com o modelo presente localmente, documentado
-  aqui como limitação honesta de cobertura de teste.
+* Suite completa: testes automatizados cobrindo cada peça pura (tensores,
+  máscara, união de caixas, recorte, PNG) **mais a inferência real**.
+  Antes, a inferência real não tinha cobertura automatizada permanente
+  porque o modelo não era distribuído — com o modelo versionado em partes
+  (seção acima) e remontado no `pretest`, `HomeStagingActCapability.test.ts`
+  agora **exige** `usedRealInpainting === true`, então uma regressão
+  quebra o teste em vez de degradar em silêncio pro `delogo`.
 
 ## Bug real encontrado testando num vídeo de imóvel de verdade: patch estático sobre câmera em movimento
 

@@ -1,0 +1,10 @@
+{
+  "target": "lama_inpainting.onnx",
+  "sha256": "9b8d68d39e7409ad7e9430fbcb3005ceb6c1b203a839c044c1d937901d0b154b",
+  "sizeBytes": 205780514,
+  "parts": [
+    "part-000",
+    "part-001",
+    "part-002"
+  ]
+}

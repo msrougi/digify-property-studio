@@ -26,13 +26,16 @@ tools/room-classifier/models/*.npz
 # (o .onnx final versionado é apps/desktop/models/yolox_nano.onnx).
 tools/object-detector/*.onnx
 
-# tools/inpainting: checkpoint TorchScript (~196MB) e o .onnx exportado
-# (~196MB) excedem o limite de 100MB por arquivo do GitHub — não versionados.
-# Rode tools/inpainting/README.md para gerar localmente. Sem o arquivo em
-# apps/desktop/models/lama_inpainting.onnx, HomeStagingActCapability cai no
-# fallback delogo automaticamente.
+# tools/inpainting: checkpoint TorchScript (~196MB) e a cópia local do .onnx
+# não são versionados.
 tools/inpainting/.venv/
 tools/inpainting/models/
+
+# O .onnx montado (~196MB) excede o limite de 100MB por arquivo do GitHub —
+# ele NÃO é versionado, mas as partes em `lama_inpainting.onnx.parts/` SÃO
+# (ver tools/inpainting/split_model.py). `scripts/assemble-models.mjs`
+# remonta o arquivo automaticamente no build/dev/test, validando SHA-256 —
+# então um clone limpo já tem inpainting real, sem passo manual.
 apps/desktop/models/lama_inpainting.onnx
 
 # tools/reflection-removal: pesos ONNX de teste (~89MB cada) e imagens
