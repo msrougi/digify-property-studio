@@ -86,6 +86,7 @@ describe("ImportAndAnalyzeVideoUseCase", () => {
       detectObjects,
       computePropertyScore,
       projectRepository,
+      { deleteAll: async () => {} },
     );
 
     const { project, scenes, propertyScore } = await useCase.execute({ filePath: videoPath });
@@ -105,6 +106,59 @@ describe("ImportAndAnalyzeVideoUseCase", () => {
     expect(persistedScenes.length).toBe(scenes.length);
     expect(persistedScenes.every((scene) => scene.toProps().roomType !== null)).toBe(true);
   }, 30_000);
+
+  it("um vídeo por vez: importar um novo descarta o anterior (projeto, cenas, objetos e arquivos renderizados)", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+    const registry = new CapabilityRegistry();
+    registry.register(new IntakeCapability());
+    registry.register(new SceneDetectCapability());
+    registry.register(
+      new RoomRecognizeCapability(
+        join(MODELS_DIR, "mobilenetv2-12.onnx"),
+        join(MODELS_DIR, "room_classifier_head.onnx"),
+      ),
+    );
+    registry.register(new ObjectDetectCapability(join(MODELS_DIR, "yolox_nano.onnx")));
+    registry.register(new ClutterDetectCapability());
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new PropertyScoreCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+
+    let projectIdSequence = 0;
+    let sceneIdSequence = 0;
+    let objectIdSequence = 0;
+    let renderedFilesCleared = 0;
+    const useCase = new ImportAndAnalyzeVideoUseCase(
+      new ImportVideoUseCase(pie, projectRepository, () => `proj${++projectIdSequence}`),
+      new DetectScenesUseCase(pie, sceneRepository, () => `s${++sceneIdSequence}`),
+      new RecognizeRoomsUseCase(pie, sceneRepository),
+      new DetectObjectsUseCase(pie, objectRepository, () => `o${++objectIdSequence}`),
+      new PropertyScoreUseCase(pie, sceneRepository, objectRepository),
+      projectRepository,
+      {
+        deleteAll: async () => {
+          renderedFilesCleared++;
+        },
+      },
+    );
+
+    await useCase.execute({ filePath: videoPath });
+    expect((await projectRepository.list()).map((p) => p.toProps().id)).toEqual(["proj1"]);
+    const scenesDoPrimeiro = await sceneRepository.findByProject("proj1");
+    expect(scenesDoPrimeiro.length).toBeGreaterThan(0);
+
+    await useCase.execute({ filePath: videoPath });
+
+    // Só o novo sobrou — nada de lista acumulando.
+    const restantes = await projectRepository.list();
+    expect(restantes.map((p) => p.toProps().id)).toEqual(["proj2"]);
+    // Cenas do anterior foram junto (cascata), não viraram órfãs.
+    expect(await sceneRepository.findByProject("proj1")).toHaveLength(0);
+    // E os vídeos renderizados do anterior foram apagados do disco.
+    expect(renderedFilesCleared).toBe(2);
+  }, 60_000);
 
   it("reporta progresso real nas 5 etapas, em ordem, terminando a última em 100%", async () => {
     const projectRepository = new SqliteProjectRepository(db);
@@ -134,6 +188,7 @@ describe("ImportAndAnalyzeVideoUseCase", () => {
       new DetectObjectsUseCase(pie, objectRepository, () => `o${++objectIdSequence}`),
       new PropertyScoreUseCase(pie, sceneRepository, objectRepository),
       projectRepository,
+      { deleteAll: async () => {} },
     );
 
     const updates: { stage: string; stageIndex: number; totalStages: number; percent: number }[] = [];

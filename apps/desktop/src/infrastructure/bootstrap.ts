@@ -33,6 +33,7 @@ import { PerspectiveActCapability } from "./capabilities/PerspectiveActCapabilit
 import { ReflectionAnalyzeCapability } from "./capabilities/ReflectionAnalyzeCapability.js";
 import { ReflectionActCapability } from "./capabilities/ReflectionActCapability.js";
 import { RenderingEngine } from "./render/RenderingEngine.js";
+import { DiskRenderedFileCleaner } from "./render/DiskRenderedFileCleaner.js";
 
 /**
  * Composition root — o único lugar que instancia infraestrutura concreta e a
@@ -101,6 +102,7 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
       detectObjects,
       computePropertyScore,
       projectRepository,
+      new DiskRenderedFileCleaner(rendersDir),
     ),
     listProjects: new ListProjectsUseCase(projectRepository),
     computePropertyScore,

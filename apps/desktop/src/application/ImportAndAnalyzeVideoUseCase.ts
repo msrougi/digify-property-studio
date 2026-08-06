@@ -6,6 +6,7 @@ import type { PropertyScoreUseCase } from "./PropertyScoreUseCase.js";
 import type { ImportVideoInput, ImportVideoUseCase } from "./ImportVideoUseCase.js";
 import type { PropertyScoreOutput } from "../infrastructure/capabilities/PropertyScoreCapability.js";
 import type { OnStageProgress } from "./progress.js";
+import type { RenderedFileCleaner } from "./RenderedFileCleaner.js";
 
 const STAGES = [
   "Importando vídeo",
@@ -37,6 +38,7 @@ export class ImportAndAnalyzeVideoUseCase {
     private readonly detectObjects: DetectObjectsUseCase,
     private readonly computePropertyScore: PropertyScoreUseCase,
     private readonly projectRepository: ProjectRepository,
+    private readonly renderedFileCleaner: RenderedFileCleaner,
   ) {}
 
   async execute(
@@ -47,6 +49,14 @@ export class ImportAndAnalyzeVideoUseCase {
     const emit = (stageIndex: number, percent: number): void => {
       onProgress?.({ stage: STAGES[stageIndex - 1] as string, stageIndex, totalStages, percent });
     };
+
+    // Um vídeo por vez: importar um novo descarta o anterior por completo
+    // (banco em cascata + arquivos renderizados no disco). Decisão de
+    // produto explícita — o app é ferramenta de passagem, não biblioteca.
+    // Antes de importar, pra que uma falha no meio do caminho não deixe
+    // dois projetos convivendo na lista.
+    await this.renderedFileCleaner.deleteAll();
+    await this.projectRepository.deleteAll();
 
     emit(1, 0);
     const { project, intake } = await this.importVideo.execute(input);

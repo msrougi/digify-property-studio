@@ -91,4 +91,11 @@ export class SqliteProjectRepository implements ProjectRepository {
       updatedAt: new Date(row.updated_at),
     });
   }
+
+  async deleteAll(): Promise<void> {
+    // `ON DELETE CASCADE` nas FKs leva scenes/objects/renders junto —
+    // `foreign_keys = ON` está ligado em connection.ts, sem isso o SQLite
+    // ignoraria a cascata em silêncio e deixaria órfãos.
+    this.db.prepare("DELETE FROM projects").run();
+  }
 }
