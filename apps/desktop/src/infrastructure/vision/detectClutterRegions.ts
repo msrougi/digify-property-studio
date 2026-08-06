@@ -77,12 +77,21 @@ const SOBEL_GY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
  * `object.detect`) nunca vira candidato a remoção, não importa o quão
  * "texturizado" pareça — proteção de segurança, não uma otimização.
  */
+export interface ClutterOptions {
+  /** Menor = mais agressivo (marca mais coisa como bagunça). */
+  zScoreThreshold?: number;
+  minRegionCells?: number;
+}
+
 export function detectClutterRegions(
   buffer: Buffer,
   width: number,
   height: number,
   excludeBoxes: Box[] = [],
+  options: ClutterOptions = {},
 ): ClutterRegion[] {
+  const zThreshold = options.zScoreThreshold ?? MODIFIED_ZSCORE_THRESHOLD;
+  const minCells = options.minRegionCells ?? MIN_REGION_CELLS;
   const cellWidth = Math.max(2, Math.floor(width / GRID_COLS));
   const cellHeight = Math.max(2, Math.floor(height / GRID_ROWS));
   const cols = Math.floor(width / cellWidth);
@@ -100,13 +109,13 @@ export function detectClutterRegions(
   const maxScore = Math.max(...cellScores);
   if (mad < 1e-6 && maxScore - median < ABSOLUTE_ANOMALY_FALLBACK) return [];
 
-  const flagged = flagAnomalousCells(cellScores, cols, rows, median, mad, excludeBoxes, cellWidth, cellHeight);
+  const flagged = flagAnomalousCells(cellScores, cols, rows, median, mad, excludeBoxes, cellWidth, cellHeight, zThreshold);
   const components = findConnectedComponents(flagged, cols, rows);
 
   const frameArea = width * height;
   const regions: ClutterRegion[] = [];
   for (const component of components) {
-    if (component.length < MIN_REGION_CELLS) continue;
+    if (component.length < minCells) continue;
 
     let minCol = Infinity;
     let minRow = Infinity;
@@ -188,6 +197,7 @@ function flagAnomalousCells(
   excludeBoxes: Box[],
   cellWidth: number,
   cellHeight: number,
+  zThreshold: number,
 ): boolean[] {
   const flagged = new Array(cols * rows).fill(false) as boolean[];
   for (let row = 0; row < rows; row++) {
@@ -204,7 +214,7 @@ function flagAnomalousCells(
         // mediana" interessa aqui (célula MENOS texturizada que o típico
         // nunca é candidata a bagunça).
         const modifiedZScore = (MAD_TO_STDDEV_FACTOR * (score - median)) / mad;
-        if (modifiedZScore <= MODIFIED_ZSCORE_THRESHOLD) continue;
+          if (modifiedZScore <= zThreshold) continue;
       }
 
       const cellCenterX = col * cellWidth + cellWidth / 2;
