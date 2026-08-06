@@ -1,8 +1,10 @@
 export * from "./entities/Project.js";
 export * from "./entities/Scene.js";
 export * from "./entities/DetectedObject.js";
+export * from "./entities/Render.js";
 export * from "./value-objects/Confidence.js";
 export * from "./errors/DomainError.js";
 export type { ProjectRepository } from "./repositories/ProjectRepository.js";
 export type { SceneRepository } from "./repositories/SceneRepository.js";
 export type { ObjectRepository } from "./repositories/ObjectRepository.js";
+export type { RenderRepository } from "./repositories/RenderRepository.js";

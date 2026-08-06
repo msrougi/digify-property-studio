@@ -1,5 +1,6 @@
 import { INIT_MIGRATION_SQL } from "./001_init.js";
 import { PROJECT_VIDEO_METADATA_SQL } from "./002_project_video_metadata.js";
+import { RENDERS_SQL } from "./003_renders.js";
 
 export interface Migration {
   id: string;
@@ -13,4 +14,5 @@ export interface Migration {
 export const MIGRATIONS: Migration[] = [
   { id: "001_init", sql: INIT_MIGRATION_SQL },
   { id: "002_project_video_metadata", sql: PROJECT_VIDEO_METADATA_SQL },
+  { id: "003_renders", sql: RENDERS_SQL },
 ];

@@ -1,5 +1,12 @@
 import { join } from "node:path";
-import { DomainError, type ObjectRepository, type ProjectRepository, type SceneRepository } from "@digify/domain";
+import {
+  DomainError,
+  Render,
+  type ObjectRepository,
+  type ProjectRepository,
+  type RenderRepository,
+  type SceneRepository,
+} from "@digify/domain";
 import type { PropertyIntelligenceEngine } from "@digify/pie";
 import type {
   LightingAnalyzeInput,
@@ -73,6 +80,7 @@ export class RenderPreviewUseCase {
     private readonly rendersDir: string,
     private readonly sceneRepository: SceneRepository,
     private readonly objectRepository: ObjectRepository,
+    private readonly renderRepository: RenderRepository,
   ) {}
 
   async execute(
@@ -293,6 +301,13 @@ export class RenderPreviewUseCase {
       // a única etapa com sub-progresso granular de verdade; as demais só
       // reportam 0/100 ao começar/terminar (ver `emit`/`nextStage` acima).
       (progress) => emit(progress.percent),
+    );
+
+    // Persiste pra que a comparação antes/depois sobreviva a trocar de
+    // projeto e a fechar o app — antes o resultado só vivia no estado da
+    // tela e se perdia, mesmo com o arquivo ainda no disco.
+    await this.renderRepository.save(
+      Render.create({ projectId: input.projectId, outputPath: renderedPath, appliedCorrections }),
     );
 
     return {

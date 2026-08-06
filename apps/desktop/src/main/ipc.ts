@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
@@ -53,6 +54,12 @@ export interface RenderPreviewOptions {
 export interface RenderPreviewDTO {
   outputPath: string;
   appliedCorrections: string[];
+}
+
+export interface RenderDTO {
+  outputPath: string;
+  appliedCorrections: string[];
+  createdAt: string;
 }
 
 export interface ExportVideoDTO {
@@ -170,6 +177,24 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
       });
     },
   );
+
+  // Render já feito antes (persistido) — é o que permite fechar o app ou
+  // trocar de projeto e reencontrar a comparação antes/depois onde parou.
+  handle("projects:getRender", async (_event, projectId: string): Promise<RenderDTO | null> => {
+    const render = await app.renderRepository.findByProject(projectId);
+    if (!render) return null;
+
+    const props = render.toProps();
+    // O arquivo pode ter sido apagado por fora do app — não adianta mostrar
+    // uma comparação apontando pra um vídeo que não existe mais.
+    if (!existsSync(props.outputPath)) return null;
+
+    return {
+      outputPath: props.outputPath,
+      appliedCorrections: props.appliedCorrections,
+      createdAt: props.createdAt.toISOString(),
+    };
+  });
 
   handle(
     "projects:selectExportDestination",

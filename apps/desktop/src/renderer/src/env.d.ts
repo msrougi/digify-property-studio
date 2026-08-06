@@ -72,6 +72,12 @@ interface ExportPresetDTO {
   description: string;
 }
 
+interface RenderDTO {
+  outputPath: string;
+  appliedCorrections: string[];
+  createdAt: string;
+}
+
 interface StageProgressDTO {
   stage: string;
   stageIndex: number;
@@ -90,6 +96,7 @@ interface DigifyApi {
     options: RenderPreviewOptions,
     onProgress?: (progress: StageProgressDTO) => void,
   ): Promise<RenderPreviewDTO>;
+  getRender(projectId: string): Promise<RenderDTO | null>;
   selectExportDestination(suggestedName: string): Promise<string | null>;
   exportVideo(
     projectId: string,

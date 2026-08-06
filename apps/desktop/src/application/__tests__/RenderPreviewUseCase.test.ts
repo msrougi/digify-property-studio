@@ -7,6 +7,7 @@ import {
   openDatabase,
   SqliteObjectRepository,
   SqliteProjectRepository,
+  SqliteRenderRepository,
   SqliteSceneRepository,
 } from "@digify/database";
 import { DetectedObject, Project, Scene } from "@digify/domain";
@@ -79,6 +80,7 @@ describe("RenderPreviewUseCase", () => {
       dir,
       sceneRepository,
       objectRepository,
+      new SqliteRenderRepository(db),
     );
 
     const result = await useCase.execute({
@@ -125,6 +127,7 @@ describe("RenderPreviewUseCase", () => {
       dir,
       sceneRepository,
       objectRepository,
+      new SqliteRenderRepository(db),
     );
 
     const updates: { stage: string; stageIndex: number; totalStages: number; percent: number }[] = [];
@@ -148,6 +151,93 @@ describe("RenderPreviewUseCase", () => {
     expect(last?.percent).toBe(100);
   });
 
+  it("persiste o render pra ele ser reencontrado depois — o usuário importa, revisa, sai e volta achando a comparação onde deixou", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    await projectRepository.save(
+      Project.create({
+        id: "p1",
+        name: "Apartamento Escuro",
+        sourceVideoPath: sourcePath,
+        sourceVideoHash: "hash-fixture",
+        video: { durationMs: 1000, width: 64, height: 64, fps: 10, codecName: "h264", hasAudio: false },
+      }),
+    );
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+    const renderRepository = new SqliteRenderRepository(db);
+
+    const registry = new CapabilityRegistry();
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new LightingActCapability());
+    registry.register(new ColorActCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+
+    // Nada guardado antes de rodar.
+    expect(await renderRepository.findByProject("p1")).toBeNull();
+
+    const result = await new RenderPreviewUseCase(
+      pie,
+      projectRepository,
+      new RenderingEngine(),
+      dir,
+      sceneRepository,
+      objectRepository,
+      renderRepository,
+    ).execute({ projectId: "p1", colorProfile: "warm" });
+
+    // Lido de um repositório NOVO sobre o mesmo banco — prova que veio do
+    // disco, não de estado em memória sobrando da chamada anterior.
+    const saved = await new SqliteRenderRepository(db).findByProject("p1");
+    expect(saved).not.toBeNull();
+    const props = saved!.toProps();
+    expect(props.outputPath).toBe(result.outputPath);
+    expect(props.appliedCorrections).toEqual(result.appliedCorrections);
+  });
+
+  it("reaplicar melhorias substitui o render anterior em vez de acumular", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    await projectRepository.save(
+      Project.create({
+        id: "p1",
+        name: "Apartamento Escuro",
+        sourceVideoPath: sourcePath,
+        sourceVideoHash: "hash-fixture",
+        video: { durationMs: 1000, width: 64, height: 64, fps: 10, codecName: "h264", hasAudio: false },
+      }),
+    );
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+    const renderRepository = new SqliteRenderRepository(db);
+
+    const registry = new CapabilityRegistry();
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new LightingActCapability());
+    registry.register(new ColorActCapability());
+    registry.register(new QualitySharpenCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+    const useCase = new RenderPreviewUseCase(
+      pie,
+      projectRepository,
+      new RenderingEngine(),
+      dir,
+      sceneRepository,
+      objectRepository,
+      renderRepository,
+    );
+
+    await useCase.execute({ projectId: "p1", colorProfile: "warm" });
+    const second = await useCase.execute({
+      projectId: "p1",
+      colorProfile: "luxury",
+      applySharpen: true,
+    });
+
+    const saved = await renderRepository.findByProject("p1");
+    expect(saved?.toProps().appliedCorrections).toEqual(second.appliedCorrections);
+    const rows = db.prepare("SELECT COUNT(*) AS total FROM renders").get() as { total: number };
+    expect(rows.total).toBe(1);
+  });
+
   it("lança erro de domínio quando o projeto não existe", async () => {
     const projectRepository = new SqliteProjectRepository(db);
     const sceneRepository = new SqliteSceneRepository(db);
@@ -164,6 +254,7 @@ describe("RenderPreviewUseCase", () => {
       dir,
       sceneRepository,
       objectRepository,
+      new SqliteRenderRepository(db),
     );
 
     await expect(

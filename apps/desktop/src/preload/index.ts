@@ -9,6 +9,7 @@ import type {
   ExportVideoDTO,
   ExportPresetDTO,
   ProgressEvent,
+  RenderDTO,
 } from "../main/ipc.js";
 import { toMediaUrl } from "../shared/media.js";
 
@@ -72,6 +73,8 @@ const digifyApi = {
       unsubscribe?.();
     }
   },
+  getRender: (projectId: string): Promise<RenderDTO | null> =>
+    ipcRenderer.invoke("projects:getRender", projectId),
   selectExportDestination: (suggestedName: string): Promise<string | null> =>
     ipcRenderer.invoke("projects:selectExportDestination", suggestedName),
   exportVideo: (

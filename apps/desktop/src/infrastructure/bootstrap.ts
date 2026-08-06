@@ -4,6 +4,7 @@ import {
   openDatabase,
   SqliteObjectRepository,
   SqliteProjectRepository,
+  SqliteRenderRepository,
   SqliteSceneRepository,
 } from "@digify/database";
 import { CapabilityRegistry, EventBus, PropertyIntelligenceEngine } from "@digify/pie";
@@ -42,6 +43,7 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
   const projectRepository = new SqliteProjectRepository(db);
   const sceneRepository = new SqliteSceneRepository(db);
   const objectRepository = new SqliteObjectRepository(db);
+  const renderRepository = new SqliteRenderRepository(db);
 
   const registry = new CapabilityRegistry();
   registry.register(new IntakeCapability());
@@ -109,11 +111,13 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
       rendersDir,
       sceneRepository,
       objectRepository,
+      renderRepository,
     ),
     exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,
     objectRepository,
     projectRepository,
+    renderRepository,
   };
 }
 

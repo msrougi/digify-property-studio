@@ -51,6 +51,29 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
     void window.digify.getExportPresets().then(setExportPresets);
   }, []);
 
+  // Recarrega o render já feito antes (persistido no banco) ao abrir ou
+  // trocar de projeto — sem isso, o resultado só existia no estado desta
+  // tela: quem importava, revisava e saía perdia a comparação
+  // antes/depois pra sempre, mesmo com o vídeo ainda no disco.
+  useEffect(() => {
+    let cancelled = false;
+    setResult(null);
+    setStatus("idle");
+    setProgress(null);
+    setExportStatus("idle");
+    setExportedPath(null);
+
+    void window.digify.getRender(projectId).then((saved) => {
+      if (cancelled || !saved) return;
+      setResult({ outputPath: saved.outputPath, appliedCorrections: saved.appliedCorrections });
+      setStatus("done");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
   async function handleRender(): Promise<void> {
     setStatus("rendering");
     setProgress(null);
