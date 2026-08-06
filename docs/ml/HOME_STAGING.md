@@ -155,6 +155,89 @@ frame, descrita abaixo, seria mais completa) mas é real, honesta e resolve
 o sintoma mais grave (o "adesivo" óbvio) com custo de implementação e
 performance viáveis agora.
 
+## RESOLVIDO: reconstrução quadro a quadro (`FrameByFrameCleaner`)
+
+**Status: shipped.** O paliativo acima resolvia o "adesivo", mas ao custo
+de não limpar nada: com câmera em movimento a cena caía no `delogo`, que
+borra sem remover. O usuário voltou com o sintoma real — *"os vídeos não
+estão sendo limpos... o que não pode é ficar a bagunça que ainda está"*.
+
+Medição que fechou o diagnóstico: num vídeo real de passeio pela casa, a
+pontuação de movimento deu **16,2 contra um limiar de 12** — ou seja,
+praticamente *toda* cena era classificada como "em movimento" e caía no
+borrão. E vídeo de imóvel real é sempre assim: alguém caminhando pela
+casa. O caminho de IA existia, mas quase nunca era exercido.
+
+**Fix real**: `FrameByFrameCleaner.ts` abandona a ideia de um remendo por
+cena. Cada quadro é detectado e reconstruído por conta própria, então
+movimento de câmera deixa de ser uma condição a evitar — vira irrelevante.
+
+Como funciona:
+
+1. `ffmpeg` decodifica pra `rawvideo` no stdout; nada de despejar milhares
+   de PNGs no disco.
+2. Cada quadro passa por `detectClutterRegions` num limiar agressivo
+   (2,5 — ver `docs/ml/CLUTTER_DETECTION.md`).
+3. A união das regiões + 25% de margem de contexto é recortada,
+   reduzida a 128×128, e vai pro LaMa real.
+4. O resultado é ampliado de volta e composto **só dentro das regiões
+   detectadas** — a vizinhança serviu de contexto e fica intocada.
+5. `ffmpeg` reencoda pelo stdin, remapeando o áudio do original
+   (`-map 0:v -map 1:a?`): reconstruir o vídeo não pode silenciá-lo.
+
+Detalhes que não são opcionais:
+
+* **Contrapressão.** Sem pausar o decoder, ele despeja o vídeo inteiro na
+  memória enquanto a inferência (ordens de grandeza mais lenta) fica pra
+  trás. O leitor só volta quando a fila esvazia, e a memória fica
+  constante.
+* **Serialização.** `session.run` não é seguro pra chamadas concorrentes
+  na mesma sessão, e sem fila os quadros sairiam fora de ordem.
+* **Ida e volta sem escorregar.** `resizeRgb.ts` mapeia pelo centro do
+  pixel (`(x + 0.5) * escala - 0.5`); sem isso a imagem escorrega meio
+  pixel a cada redimensionamento — e aqui sempre há dois, então o erro
+  dobraria e o remendo ficaria deslocado do que ele cobre.
+* **Limite pela máscara, não pelo recorte.** Se a área a reconstruir passa
+  de 60% do quadro, não sobrou vizinhança de onde reconstruir e o quadro
+  passa intacto (sinal de corte/estouro de luz, não de bagunça). O limite
+  é sobre a *máscara* de propósito: regiões espalhadas pelo quadro inteiro
+  dão um recorte grande com máscara pequena — e esse quadro *precisa* ser
+  limpo.
+
+**O custo, aceito explicitamente pelo usuário**: ~390ms por quadro
+(medido), ou seja cerca de 15–18 minutos pra um vídeo de 1min30. Por isso
+`RenderPreviewUseCase` reporta progresso real por quadro pelo canal
+`StageProgress`, a barra estima o tempo restante a partir do ritmo medido,
+e o painel avisa do custo *antes* de começar — uma barra que anda devagar
+sem previsão é indistinguível de um app travado.
+
+**Ordem importa**: a limpeza roda como pré-passo, *antes* de reflexo e
+perspectiva, e o vídeo limpo vira a fonte de tudo que vem depois. O
+overlay de reflexo é um recorte do frame original cobrindo o quadro
+inteiro — colado sobre o vídeo já limpo, traria a bagunça de volta.
+
+O intermediário é descartado em `finally` assim que o render final termina
+(ou falha): é um vídeo inteiro a mais no disco, e o app é efêmero por
+decisão de produto.
+
+Quando o modelo de 196MB não está montado, `isAvailable()` devolve `false`
+e o render cai no caminho antigo por cena em vez de falhar.
+
+### Verificação
+
+* `FrameByFrameCleaner.test.ts` — vídeo real gerado via FFmpeg com um
+  retângulo de xadrez que **anda** ao longo do tempo (exatamente a
+  condição que o caminho antigo não resolvia). A variância na região da
+  bagunça cai de **15.535 para 0,4**; todo quadro passa pelo pipeline; um
+  vídeo sem bagunça sai com zero quadros alterados.
+* `RenderPreviewUseCase.test.ts` — prova a orquestração: a limpeza parte
+  do vídeo do usuário, o render final parte do vídeo limpo, o
+  intermediário é descartado, e sem modelo o caminho antigo é mantido.
+* Rodado nas três amostras reais de cômodo do repositório: 100% dos
+  quadros alterados, ~390ms/quadro, 12–16% do quadro reconstruído, com
+  perda de nitidez localizada nos remendos e não global (tabela em
+  `docs/ml/CLUTTER_DETECTION.md`).
+
 ## RESOLVIDO: o conflito Mac Intel × LaMa (corrigindo o modelo, não o runtime)
 
 **Status: resolvido.** A seção abaixo descreve o impasse original; esta
@@ -261,9 +344,23 @@ estava nesta lista: **corrigir o modelo em vez do runtime** — ver a seção
 ## Caminho futuro
 
 Linhas verticais/distorção de lente e outras melhorias de Perspective
-seguem em aberto. Resolver o conflito de versão do `onnxruntime-node`
-acima (pra restaurar LaMa real em Mac Intel) e, complementarmente, rodar o
-mesmo LaMa por cena com tracking de câmera real (reprocessar conforme o
-enquadramento muda, em vez de só pular a cena quando há movimento) melhora
-a robustez em vídeos com movimento de câmera mais agressivo — não
-implementado ainda.
+seguem em aberto.
+
+Os dois itens que ocupavam esta seção foram resolvidos: o conflito
+`onnxruntime-node` × Mac Intel (corrigindo o modelo, não o runtime) e o
+"adesivo" de câmera em movimento (reconstrução quadro a quadro) — ambos
+documentados acima.
+
+O que continua em aberto na limpeza:
+
+* **Coerência temporal.** Cada quadro é reconstruído isoladamente, então o
+  conteúdo inventado pode variar de um quadro pro outro (cintilação) numa
+  região grande. Não observado como problema nas amostras testadas, mas é
+  a limitação estrutural da abordagem.
+* **Resolução da inferência.** 128px é uma escolha de custo: 256px
+  triplicaria o tempo (979ms/quadro medido) e o vídeo já leva ~15 min.
+  Regiões grandes ficam visivelmente mais macias que o entorno.
+* **A detecção continua sendo textura, não reconhecimento.** Ela não sabe
+  que aquilo é uma pilha de roupa — só que destoa. A regra de produto
+  ("na dúvida, tira") torna isso aceitável, mas significa que um móvel
+  muito texturizado pode ser reconstruído junto.

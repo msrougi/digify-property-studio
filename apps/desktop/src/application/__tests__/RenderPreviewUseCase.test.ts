@@ -238,6 +238,139 @@ describe("RenderPreviewUseCase", () => {
     expect(rows.total).toBe(1);
   });
 
+  it("com limpeza quadro a quadro disponível: limpa primeiro, renderiza a partir do vídeo limpo e descarta o intermediário", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    await projectRepository.save(
+      Project.create({
+        id: "p1",
+        name: "Casa Bagunçada",
+        sourceVideoPath: sourcePath,
+        sourceVideoHash: "hash-fixture",
+        video: { durationMs: 1000, width: 64, height: 64, fps: 10, codecName: "h264", hasAudio: false },
+      }),
+    );
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+
+    const registry = new CapabilityRegistry();
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new LightingActCapability());
+    registry.register(new ColorActCapability());
+    // Registrada de propósito: se o caso de uso ainda caísse no caminho por
+    // cena, o teste passaria sem provar nada. Como não há cena nenhuma no
+    // banco, aquele caminho não produziria correção alguma.
+    registry.register(new HomeStagingActCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+
+    // Dublê da limpeza (o modelo real de 196MB é exercitado no teste do
+    // FrameByFrameCleaner). Aqui o que está sob teste é a ORQUESTRAÇÃO:
+    // a ordem das etapas, qual vídeo alimenta o render e o descarte.
+    const cleanedFromSource: string[] = [];
+    const discarded: string[] = [];
+    let cleanedPath = "";
+    const fakeCleaner = {
+      isAvailable: () => true,
+      clean: async (source: string, output: string, onProgress?: (p: {
+        framesProcessed: number;
+        totalFrames: number;
+        framesChanged: number;
+      }) => void) => {
+        cleanedFromSource.push(source);
+        cleanedPath = output;
+        // Produz um vídeo de verdade no caminho pedido — o render seguinte
+        // vai mesmo tentar ler esse arquivo.
+        await generateTestVideo(output, [{ color: "gray", durationSec: 1 }]);
+        onProgress?.({ framesProcessed: 5, totalFrames: 10, framesChanged: 5 });
+        return { framesProcessed: 10, framesChanged: 7 };
+      },
+      discard: async (path: string) => {
+        discarded.push(path);
+      },
+    };
+
+    const stagesSeen: string[] = [];
+    const useCase = new RenderPreviewUseCase(
+      pie,
+      projectRepository,
+      new RenderingEngine(),
+      dir,
+      sceneRepository,
+      objectRepository,
+      new SqliteRenderRepository(db),
+      fakeCleaner,
+    );
+
+    const result = await useCase.execute(
+      { projectId: "p1", colorProfile: "warm", applyHomeStaging: true },
+      (progress) => {
+        if (stagesSeen.at(-1) !== progress.stage) stagesSeen.push(progress.stage);
+      },
+    );
+
+    // A limpeza parte do vídeo original do usuário...
+    expect(cleanedFromSource).toEqual([sourcePath]);
+    // ...e o render final parte do vídeo já limpo, não do original.
+    expect(discarded).toEqual([cleanedPath]);
+    expect(cleanedPath).not.toBe(sourcePath);
+
+    expect(stagesSeen[1]).toBe("Limpando a bagunça com IA (quadro a quadro)");
+    expect(stagesSeen.at(-1)).toBe("Renderizando vídeo final");
+    expect(result.appliedCorrections.join(" ")).toContain("7 de 10 quadros");
+  });
+
+  it("sem o modelo montado, mantém o caminho antigo por cena", async () => {
+    const projectRepository = new SqliteProjectRepository(db);
+    await projectRepository.save(
+      Project.create({
+        id: "p1",
+        name: "Casa",
+        sourceVideoPath: sourcePath,
+        sourceVideoHash: "hash-fixture",
+        video: { durationMs: 1000, width: 64, height: 64, fps: 10, codecName: "h264", hasAudio: false },
+      }),
+    );
+    const sceneRepository = new SqliteSceneRepository(db);
+    const objectRepository = new SqliteObjectRepository(db);
+
+    const registry = new CapabilityRegistry();
+    registry.register(new LightingAnalyzeCapability());
+    registry.register(new LightingActCapability());
+    registry.register(new ColorActCapability());
+    registry.register(new HomeStagingActCapability());
+    const pie = new PropertyIntelligenceEngine(registry, new EventBus());
+
+    let cleanCalled = false;
+    const stagesSeen: string[] = [];
+    const useCase = new RenderPreviewUseCase(
+      pie,
+      projectRepository,
+      new RenderingEngine(),
+      dir,
+      sceneRepository,
+      objectRepository,
+      new SqliteRenderRepository(db),
+      {
+        isAvailable: () => false,
+        clean: async () => {
+          cleanCalled = true;
+          return { framesProcessed: 0, framesChanged: 0 };
+        },
+        discard: async () => {},
+      },
+    );
+
+    await useCase.execute(
+      { projectId: "p1", colorProfile: "warm", applyHomeStaging: true },
+      (progress) => {
+        if (stagesSeen.at(-1) !== progress.stage) stagesSeen.push(progress.stage);
+      },
+    );
+
+    expect(cleanCalled).toBe(false);
+    expect(stagesSeen).toContain("Removendo itens temporários");
+    expect(stagesSeen).not.toContain("Limpando a bagunça com IA (quadro a quadro)");
+  });
+
   it("lança erro de domínio quando o projeto não existe", async () => {
     const projectRepository = new SqliteProjectRepository(db);
     const sceneRepository = new SqliteSceneRepository(db);

@@ -297,6 +297,21 @@ body {
   cursor: pointer;
 }
 
+/*
+ * Aviso de custo da limpeza com IA. `flex-basis: 100%` porque o container das
+ * opções é um flex-wrap: sem isso o aviso disputaria a linha com as caixas de
+ * seleção em vez de aparecer inteiro embaixo delas.
+ */
+.render-panel__hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}
+
 .property-score {
   background: var(--surface-2);
   border: 1px solid var(--border);

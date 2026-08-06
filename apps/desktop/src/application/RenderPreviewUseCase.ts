@@ -47,6 +47,7 @@ import type {
 } from "../infrastructure/capabilities/ReflectionActCapability.js";
 import type { ImageOverlay, RenderingEngine } from "../infrastructure/render/RenderingEngine.js";
 import { detectCameraMotion } from "../infrastructure/vision/detectCameraMotion.js";
+import type { ClutterCleaner } from "./ClutterCleaner.js";
 import type { OnStageProgress } from "./progress.js";
 
 export interface RenderPreviewInput {
@@ -81,7 +82,21 @@ export class RenderPreviewUseCase {
     private readonly sceneRepository: SceneRepository,
     private readonly objectRepository: ObjectRepository,
     private readonly renderRepository: RenderRepository,
+    /**
+     * Limpeza de bagunça quadro a quadro. Opcional: sem ela (ou sem o modelo
+     * de inpainting montado) o caso de uso cai no caminho antigo, por cena.
+     */
+    private readonly clutterCleaner?: ClutterCleaner,
   ) {}
+
+  /**
+   * O caminho quadro a quadro só entra quando há modelo. É ele que de fato
+   * limpa vídeo de câmera em movimento — que é o caso de todo vídeo de
+   * imóvel real (alguém andando pela casa).
+   */
+  private useFrameByFrameCleaning(applyHomeStaging: boolean | undefined): boolean {
+    return applyHomeStaging === true && this.clutterCleaner?.isAvailable() === true;
+  }
 
   async execute(
     input: RenderPreviewInput,
@@ -94,10 +109,15 @@ export class RenderPreviewUseCase {
 
     // Lista de etapas dinâmica: só entram as correções de fato pedidas nesta
     // chamada — reportar uma etapa que nem vai rodar seria enganoso.
+    const frameByFrame = this.useFrameByFrameCleaning(input.applyHomeStaging);
     const stages = ["Analisando iluminação e cor"];
+    // Nome próprio porque a experiência é outra: esta etapa reconstrói cada
+    // quadro com IA e leva minutos, não segundos. Chamá-la do mesmo jeito que
+    // a versão rápida faria o usuário achar que o app travou.
+    if (frameByFrame) stages.push("Limpando a bagunça com IA (quadro a quadro)");
     if (input.applySharpen) stages.push("Aplicando nitidez");
     if (input.applyReflection) stages.push("Reduzindo reflexo");
-    if (input.applyHomeStaging) stages.push("Removendo itens temporários");
+    if (input.applyHomeStaging && !frameByFrame) stages.push("Removendo itens temporários");
     if (input.applyPerspective) stages.push("Corrigindo perspectiva");
     stages.push("Renderizando vídeo final");
     const totalStages = stages.length;
@@ -144,6 +164,38 @@ export class RenderPreviewUseCase {
     const overlays: ImageOverlay[] = [];
     emit(100);
 
+    // Fonte de tudo que vem depois. A limpeza quadro a quadro gera um vídeo
+    // intermediário, e ela roda ANTES das demais etapas de propósito: o
+    // overlay de reflexo é um recorte do frame original cobrindo o quadro
+    // inteiro — colado sobre o vídeo já limpo, ele traria a bagunça de volta.
+    let renderSourcePath = sourcePath;
+
+    if (frameByFrame) {
+      nextStage();
+      const cleanedPath = join(this.rendersDir, `${input.projectId}-limpo.mp4`);
+      const cleaner = this.clutterCleaner as ClutterCleaner;
+      const { framesProcessed, framesChanged } = await cleaner.clean(
+        sourcePath,
+        cleanedPath,
+        (progress) => {
+          // Sem FPS legível não há total confiável, e uma % inventada numa
+          // etapa de minutos seria pior que nenhuma.
+          if (progress.totalFrames > 0) {
+            emit(
+              Math.min(100, Math.round((progress.framesProcessed / progress.totalFrames) * 100)),
+            );
+          }
+        },
+      );
+      renderSourcePath = cleanedPath;
+      appliedCorrections.push(
+        framesChanged > 0
+          ? `Bagunça removida com IA em ${framesChanged} de ${framesProcessed} quadros (reconstrução quadro a quadro, acompanha a câmera em movimento).`
+          : "Nenhuma bagunça encontrada nos quadros analisados — vídeo mantido como está.",
+      );
+      emit(100);
+    }
+
     if (input.applySharpen) {
       nextStage();
       const sharpen = await this.pie.run<void, QualitySharpenOutput>(
@@ -170,7 +222,7 @@ export class RenderPreviewUseCase {
         const atMs = Math.round((sceneProps.startMs + sceneProps.endMs) / 2);
 
         const { isStatic: sceneIsStatic } = await detectCameraMotion(
-          sourcePath,
+          renderSourcePath,
           sceneProps.startMs,
           sceneProps.endMs,
           frameWidth,
@@ -182,7 +234,7 @@ export class RenderPreviewUseCase {
           ReflectionAnalyzeOutput
         >(
           "reflection.analyze",
-          { filePath: sourcePath, atMs, frameWidth, frameHeight },
+          { filePath: renderSourcePath, atMs, frameWidth, frameHeight },
           { projectId: input.projectId },
         );
 
@@ -190,7 +242,7 @@ export class RenderPreviewUseCase {
           "reflection.act",
           {
             ...reflectionAnalyze.output,
-            filePath: sourcePath,
+            filePath: renderSourcePath,
             atMs,
             frameWidth,
             frameHeight,
@@ -209,7 +261,7 @@ export class RenderPreviewUseCase {
       emit(100);
     }
 
-    if (input.applyHomeStaging) {
+    if (input.applyHomeStaging && !frameByFrame) {
       nextStage();
       const { width: frameWidth, height: frameHeight } = project.toProps().video;
       const scenes = await this.sceneRepository.findByProject(input.projectId);
@@ -267,7 +319,7 @@ export class RenderPreviewUseCase {
       >(
         "perspective.analyze",
         {
-          filePath: sourcePath,
+          filePath: renderSourcePath,
           atMs: midpointMs,
           frameWidth: videoProps.width,
           frameHeight: videoProps.height,
@@ -295,13 +347,22 @@ export class RenderPreviewUseCase {
     nextStage();
 
     const outputPath = join(this.rendersDir, `${input.projectId}.mp4`);
-    const { outputPath: renderedPath } = await this.renderingEngine.render(
-      { sourcePath, outputPath, filters, overlays },
-      // % real do FFmpeg (tempo de vídeo já processado / duração total) —
-      // a única etapa com sub-progresso granular de verdade; as demais só
-      // reportam 0/100 ao começar/terminar (ver `emit`/`nextStage` acima).
-      (progress) => emit(progress.percent),
-    );
+    let renderedPath: string;
+    try {
+      ({ outputPath: renderedPath } = await this.renderingEngine.render(
+        { sourcePath: renderSourcePath, outputPath, filters, overlays },
+        // % real do FFmpeg (tempo de vídeo já processado / duração total) —
+        // a única etapa com sub-progresso granular de verdade; as demais só
+        // reportam 0/100 ao começar/terminar (ver `emit`/`nextStage` acima).
+        (progress) => emit(progress.percent),
+      ));
+    } finally {
+      // O intermediário já cumpriu o papel — em `finally` porque um render que
+      // falha não pode deixar um vídeo inteiro esquecido no disco.
+      if (renderSourcePath !== sourcePath) {
+        await this.clutterCleaner?.discard(renderSourcePath);
+      }
+    }
 
     // Persiste pra que a comparação antes/depois sobreviva a trocar de
     // projeto e a fechar o app — antes o resultado só vivia no estado da

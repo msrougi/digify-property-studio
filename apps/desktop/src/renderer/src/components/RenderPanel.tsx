@@ -152,7 +152,7 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
             onChange={(event) => setApplyHomeStaging(event.target.checked)}
             disabled={status === "rendering"}
           />
-          Remover itens temporários
+          Limpar a bagunça (IA)
         </label>
         <label className="render-panel__checkbox">
           <input
@@ -175,6 +175,15 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
         <button className="button-primary" onClick={handleRender} disabled={status === "rendering"}>
           {status === "rendering" ? "Aplicando…" : "Aplicar melhorias"}
         </button>
+        {applyHomeStaging ? (
+          // Aviso explícito antes de começar: a limpeza reconstrói CADA quadro
+          // com IA. Sem isso o usuário marca a caixa achando que é rápido como
+          // as outras e conclui que o app travou.
+          <p className="render-panel__hint">
+            A limpeza reconstrói cada quadro com IA — leva vários minutos (cerca
+            de 15 num vídeo de 1min30). As outras opções são rápidas.
+          </p>
+        ) : null}
       </div>
 
       {status === "rendering" && progress && (
