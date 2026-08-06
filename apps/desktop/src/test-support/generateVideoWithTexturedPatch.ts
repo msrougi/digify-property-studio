@@ -16,11 +16,20 @@ export async function generateVideoWithTexturedPatch(
   size: { width: number; height: number },
   patch: { x: number; y: number; width: number; height: number },
   durationSec = 1,
+  /**
+   * Janela em que a textura aparece (segundos). Sem isto, ela fica visível o
+   * vídeo inteiro. Serve pra reproduzir bagunça *transitória* — algo que
+   * aparece num piscar e some —, que é como se comporta um falso positivo de
+   * ruído: `clutter.detect` exige concordância entre frames justamente pra
+   * não relatar esse tipo de coisa.
+   */
+  visible?: { fromSec: number; toSec: number },
 ): Promise<void> {
   const { width, height } = size;
   const { x, y, width: pw, height: ph } = patch;
 
-  const luma = `if(between(X,${x},${x + pw})*between(Y,${y},${y + ph}),mod(floor(X/4)+floor(Y/4),2)*215+20,128)`;
+  const timeGate = visible ? `*between(T,${visible.fromSec},${visible.toSec})` : "";
+  const luma = `if(between(X,${x},${x + pw})*between(Y,${y},${y + ph})${timeGate},mod(floor(X/4)+floor(Y/4),2)*215+20,128)`;
 
   await execFileAsync(FFMPEG_PATH, [
     "-y",

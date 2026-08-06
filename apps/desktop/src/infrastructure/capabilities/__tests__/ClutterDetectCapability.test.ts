@@ -72,4 +72,31 @@ describe("ClutterDetectCapability", () => {
 
     expect(result.output.regions).toHaveLength(0);
   }, 30_000);
+
+  it("não relata bagunça que aparece num único frame — é assim que ruído se comporta, e é o que separa falso positivo de sujeira real", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-clutter-detect-transiente-"));
+    const persistente = join(dir, "persistente.mp4");
+    const transitorio = join(dir, "transitorio.mp4");
+
+    // A cena 0–1000ms é amostrada em 167/333/500/667/833ms. A janela
+    // 0,45–0,55s cai em cima de UM único desses instantes.
+    await generateVideoWithTexturedPatch(persistente, SIZE, PATCH);
+    await generateVideoWithTexturedPatch(transitorio, SIZE, PATCH, 1, { fromSec: 0.45, toSec: 0.55 });
+
+    const capability = new ClutterDetectCapability();
+    const entrada = {
+      sceneStartMs: 0,
+      sceneEndMs: 1000,
+      frameWidth: SIZE.width,
+      frameHeight: SIZE.height,
+      excludeBoxes: [],
+    };
+
+    const comBagunca = await capability.execute({ ...entrada, filePath: persistente });
+    const comPisca = await capability.execute({ ...entrada, filePath: transitorio });
+
+    // Mesma textura, mesmo lugar: a única diferença é durar ou não.
+    expect(comBagunca.output.regions.length).toBeGreaterThan(0);
+    expect(comPisca.output.regions).toHaveLength(0);
+  }, 30_000);
 });

@@ -141,7 +141,7 @@ O mesmo algoritmo é usado com agressividades diferentes, de propósito:
 
 | Quem usa | Limiar | Por quê |
 |----------|--------|---------|
-| `clutter.detect` (relatório/score) | 5,0 | Só *aponta* bagunça numa lista pro usuário. Um falso positivo aqui é uma acusação errada sobre o imóvel. |
+| `clutter.detect` (relatório/score) | 3,5 + concordância entre frames | Só *aponta* bagunça numa lista pro usuário. Um falso positivo aqui é uma acusação errada sobre o imóvel. |
 | `FrameByFrameCleaner` (limpeza) | 2,5 | *Reconstrói* a região. A regra de produto é "na dúvida, tira": some um móvel e tudo bem, o que não pode é sobrar sujeira. |
 
 Varredura real feita nos vídeos de imóvel do usuário (fração do quadro
@@ -154,10 +154,40 @@ marcada como bagunça):
 | 2,5    | 12–17%    |
 | 2,0    | 20–27%    |
 
-Foi esse 5,0 que produziu o "100/100, 0 objetos detectados" num vídeo
-visivelmente bagunçado: adequado pra não acusar à toa num relatório,
-inútil pra limpar de fato. Daí o parâmetro `zScoreThreshold` existir — em
-vez de um número só servindo mal aos dois usos.
+Foi o 5,0 que produziu o "100/100, 0 objetos detectados" num vídeo
+visivelmente bagunçado. Daí o parâmetro `zScoreThreshold` existir — em vez
+de um número só servindo mal aos dois usos.
+
+### Por que o relatório não ficou em 5,0
+
+Medido nas três amostras reais de cômodo com o limiar 5,0: **0, 0 e 1
+região**. Ou seja, o relatório dizia "nada pra tirar" em cômodos onde a
+limpeza depois reconstrói 12–16% de cada quadro. Uma incoerência que o
+usuário veria na tela.
+
+Baixar o limiar sozinho não resolvia, porque ruído puro de sensor começa a
+disparar exatamente na mesma faixa (8 seeds determinísticas, ruído
+uniforme de amplitude 15, regiões falsas por quadro):
+
+| limiar | falsos positivos por seed |
+|--------|---------------------------|
+| 5,0    | 0, 0, 0, 0, 0, 0, 0, 0    |
+| 4,0    | 1, 0, 0, 0, 0, 1, 1, 0    |
+| 3,5    | 1, 0, 0, 1, 1, 1, 2, 0    |
+| 3,0    | 2, 1, 0, 1, 1, 1, 4, 0    |
+| 2,5    | 4, 2, 2, 2, 3, 5, 7, 1    |
+
+O que separa os dois casos não é a intensidade, é a **persistência**:
+bagunça física fica parada no mesmo lugar, ruído pula de lugar a cada
+quadro. `clutter.detect` já amostrava 5 frames por cena — passou a exigir
+que pelo menos 2 frames distintos concordem sobre o mesmo lugar
+(`MIN_FRAMES_CONFIRMING`). Com isso o relatório passou de **0/0/1** para
+**4/4/3** regiões nas mesmas amostras reais, sem abrir a porta pro ruído.
+
+Coberto por teste real: dois vídeos com a MESMA textura no MESMO lugar,
+um com a mancha o vídeo inteiro e outro só numa janela de 0,1s (que cai em
+cima de um único instante de amostragem). O primeiro é relatado, o segundo
+não.
 
 Medido nas três amostras reais de cômodo do repositório com o limiar 2,5,
 depois da limpeza quadro a quadro:

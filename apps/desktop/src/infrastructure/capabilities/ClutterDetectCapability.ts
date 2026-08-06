@@ -26,6 +26,29 @@ export interface ClutterDetectOutput {
 const SAMPLES_PER_SCENE = 5;
 
 /**
+ * Limiar da detecção no caminho de RELATÓRIO. Mais frouxo que o padrão do
+ * `detectClutterRegions` (5,0) porque com 5,0 os cômodos reais de exemplo
+ * voltavam com 0/0/1 regiões — foi exatamente isso que produziu o
+ * "100/100, nada pra tirar" num vídeo visivelmente bagunçado.
+ *
+ * Ainda bem mais conservador que os 2,5 da limpeza (`FrameByFrameCleaner`),
+ * e por um bom motivo: aqui um falso positivo vira uma acusação errada
+ * sobre o imóvel numa lista que o usuário lê, não um remendo invisível.
+ */
+const REPORT_ZSCORE_THRESHOLD = 3.5;
+
+/**
+ * Quantos frames distintos precisam concordar pra uma região virar relatório.
+ *
+ * Medido: com o limiar em 3,5, ruído puro de sensor produz 0–2 regiões
+ * falsas por frame (contra 0 no limiar 5,0). Só que essas regiões caem em
+ * lugares ALEATÓRIOS a cada frame, enquanto bagunça de verdade fica parada
+ * no mesmo lugar. Exigir concordância entre frames separa as duas coisas
+ * sem sacrificar sensibilidade — o que baixar o limiar sozinho não faria.
+ */
+const MIN_FRAMES_CONFIRMING = 2;
+
+/**
  * Capability `clutter.detect` — docs/CAPABILITY_REGISTRY.md, Vision Layer.
  * Complementa `object.detect`: o YOLOX/COCO só reconhece 80 tipos
  * específicos de objeto, sem categoria nenhuma pra "monte de roupa no
@@ -71,7 +94,13 @@ export class ClutterDetectCapability implements Capability<ClutterDetectInput, C
         height: box.height * scale,
       }));
 
-      const regions = detectClutterRegions(frame.buffer, frame.width, frame.height, scaledExcludeBoxes);
+      const regions = detectClutterRegions(
+        frame.buffer,
+        frame.width,
+        frame.height,
+        scaledExcludeBoxes,
+        { zScoreThreshold: REPORT_ZSCORE_THRESHOLD },
+      );
       // Escala de volta pro espaço de coordenadas original do frame — o
       // resto do pipeline (overlay, delogo, persistência) trabalha nesse
       // espaço.
@@ -86,7 +115,7 @@ export class ClutterDetectCapability implements Capability<ClutterDetectInput, C
       );
     }
 
-    const mergedRegions = mergeOverlappingRegions(regionsPerFrame.flat());
+    const mergedRegions = mergeOverlappingRegions(regionsPerFrame);
 
     const results: ClutterDetectResult[] = mergedRegions.map((region) => ({
       boundingBox: { x: region.x, y: region.y, width: region.width, height: region.height },
@@ -109,19 +138,33 @@ export class ClutterDetectCapability implements Capability<ClutterDetectInput, C
  * funde regiões que se sobrepõem significativamente em vez de devolver uma
  * caixa por frame (evitaria duplicar o mesmo item várias vezes na lista de
  * objetos removíveis).
+ *
+ * E é aqui que a concordância entre frames vira o filtro de falso positivo:
+ * uma região só sobrevive se pelo menos `MIN_FRAMES_CONFIRMING` frames
+ * DISTINTOS marcaram aquele mesmo lugar. Bagunça física fica parada; ruído
+ * de sensor pula de lugar a cada frame.
  */
-function mergeOverlappingRegions(regions: ClutterRegion[]): ClutterRegion[] {
-  const sorted = [...regions].sort((a, b) => b.textureScore - a.textureScore);
-  const merged: ClutterRegion[] = [];
+function mergeOverlappingRegions(regionsPerFrame: ClutterRegion[][]): ClutterRegion[] {
+  const withFrame = regionsPerFrame.flatMap((regions, frameIndex) =>
+    regions.map((region) => ({ region, frameIndex })),
+  );
+  const sorted = withFrame.sort((a, b) => b.region.textureScore - a.region.textureScore);
 
-  for (const region of sorted) {
-    const overlapping = merged.find((existing) => overlapRatio(region, existing) > 0.3);
-    if (!overlapping) {
-      merged.push(region);
-    }
+  const clusters: { region: ClutterRegion; frames: Set<number> }[] = [];
+  for (const { region, frameIndex } of sorted) {
+    const existing = clusters.find((cluster) => overlapRatio(region, cluster.region) > 0.3);
+    // O representante do cluster é o primeiro (maior textureScore); os
+    // demais só somam a confirmação de que aquele lugar não foi acaso.
+    if (existing) existing.frames.add(frameIndex);
+    else clusters.push({ region, frames: new Set([frameIndex]) });
   }
 
-  return merged;
+  // Cena tão curta que só rendeu um frame de amostra não tem como confirmar
+  // nada — aí exigir dois descartaria tudo, o que seria pior.
+  const required = Math.min(MIN_FRAMES_CONFIRMING, regionsPerFrame.length);
+  return clusters
+    .filter((cluster) => cluster.frames.size >= required)
+    .map((cluster) => cluster.region);
 }
 
 function overlapRatio(a: ClutterRegion, b: ClutterRegion): number {
