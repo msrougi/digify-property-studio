@@ -281,7 +281,7 @@ describe("RenderPreviewUseCase", () => {
         // vai mesmo tentar ler esse arquivo.
         await generateTestVideo(output, [{ color: "gray", durationSec: 1 }]);
         onProgress?.({ framesProcessed: 5, totalFrames: 10, framesChanged: 5 });
-        return { framesProcessed: 10, framesChanged: 7 };
+        return { framesProcessed: 10, framesChanged: 7, produced: true };
       },
       discard: async (path: string) => {
         discarded.push(path);
@@ -353,7 +353,7 @@ describe("RenderPreviewUseCase", () => {
         isAvailable: () => false,
         clean: async () => {
           cleanCalled = true;
-          return { framesProcessed: 0, framesChanged: 0 };
+          return { framesProcessed: 0, framesChanged: 0, produced: false };
         },
         discard: async () => {},
       },

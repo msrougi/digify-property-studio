@@ -14,6 +14,7 @@ import { decodeYoloxOutput } from "../ml/yolox/decodeYoloxOutput.js";
 import { letterboxRgbFrame } from "../ml/yolox/letterboxRgbFrame.js";
 import { nonMaxSuppression } from "../ml/yolox/nonMaxSuppression.js";
 import { isRemovableForCleaning } from "../ml/yolox/removableForCleaning.js";
+import { overlapRatio } from "../vision/overlapRatio.js";
 import { resizeRgb } from "../vision/resizeRgb.js";
 import type { Box } from "../vision/unionBoxWithMargin.js";
 
@@ -76,6 +77,23 @@ const DEFAULT_MAX_PATCHES_PER_FRAME = 2;
 const FEATHER_PX = 6;
 
 /**
+ * Por quantos quadros um objeto continua sendo apagado depois que o detector
+ * perde ele de vista.
+ *
+ * Detector de objeto oscila: a garrafa aparece no quadro N, some no N+1 e
+ * volta no N+2 — não porque saiu de cena, mas porque a confiança beirou o
+ * limiar. Sem memória, ela reapareceria piscando no vídeo final, que é uma
+ * deformação pior que não ter removido nada.
+ *
+ * A memória é causal (só olha pro passado), então não exige adiantar quadros
+ * e não quebra o streaming.
+ */
+const DETECTION_MEMORY_FRAMES = 4;
+
+/** Sobreposição mínima pra considerar que duas caixas são o MESMO objeto entre quadros. */
+const SAME_OBJECT_OVERLAP = 0.3;
+
+/**
  * Remove objetos soltos QUADRO A QUADRO, gerando um vídeo novo.
  *
  * ## Por que quadro a quadro
@@ -116,6 +134,8 @@ const FEATHER_PX = 6;
 export class FrameByFrameCleaner implements ClutterCleaner {
   private session: ort.InferenceSession | null = null;
   private detector: ort.InferenceSession | null = null;
+  /** Memória curta de detecções, pra evitar cintilação. Ver `DETECTION_MEMORY_FRAMES`. */
+  private recentDetections: { box: Box; framesLeft: number }[] = [];
 
   constructor(
     private readonly modelPath: string,
@@ -151,6 +171,31 @@ export class FrameByFrameCleaner implements ClutterCleaner {
   private async ensureDetector(): Promise<ort.InferenceSession> {
     this.detector ??= await ort.InferenceSession.create(this.detectorPath);
     return this.detector;
+  }
+
+  /**
+   * Junta o que foi detectado agora com o que ainda está "quente" dos quadros
+   * anteriores, pra que uma oscilação do detector não faça o objeto piscar.
+   *
+   * Uma caixa herdada só sobrevive enquanto o detector não a reencontra; se
+   * ele reencontra, a posição nova substitui a antiga (o objeto pode ter se
+   * movido junto com a câmera).
+   */
+  private rememberDetections(detected: Box[]): Box[] {
+    const ainda = this.recentDetections
+      .map((memoria) => ({ ...memoria, framesLeft: memoria.framesLeft - 1 }))
+      .filter(
+        (memoria) =>
+          memoria.framesLeft > 0 &&
+          // Reencontrado agora: a caixa nova manda, esta some da memória.
+          !detected.some((box) => overlapRatio(box, memoria.box) > SAME_OBJECT_OVERLAP),
+      );
+
+    this.recentDetections = [
+      ...detected.map((box) => ({ box, framesLeft: DETECTION_MEMORY_FRAMES })),
+      ...ainda,
+    ];
+    return this.recentDetections.map((memoria) => memoria.box);
   }
 
   /** Objetos removíveis neste quadro, do maior pro menor (o mais visível primeiro). */
@@ -216,6 +261,8 @@ export class FrameByFrameCleaner implements ClutterCleaner {
     const fps = meta.fps > 0 ? meta.fps : 30;
     const session = await this.ensureSession();
     const detector = await this.ensureDetector();
+    // Zera entre vídeos: memória de um vídeo não pode vazar pro seguinte.
+    this.recentDetections = [];
 
     const decoder = spawn(FFMPEG_PATH, [
       "-i", sourcePath,
@@ -231,7 +278,12 @@ export class FrameByFrameCleaner implements ClutterCleaner {
       // silenciar o vídeo do usuário.
       "-i", sourcePath,
       "-map", "0:v", "-map", "1:a?",
-      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "copy",
+      // CRF 16 (contra o padrão 23) porque este arquivo é INTERMEDIÁRIO: o
+      // RenderingEngine ainda vai recodificar por cima. Duas passagens no
+      // padrão empilhariam perda de geração num vídeo que o cliente vai
+      // publicar. Ocupa mais disco por alguns minutos e é descartado depois.
+      "-c:v", "libx264", "-crf", "16", "-preset", "faster",
+      "-pix_fmt", "yuv420p", "-c:a", "copy",
       "-shortest",
       outputPath,
     ]);
@@ -299,7 +351,15 @@ export class FrameByFrameCleaner implements ClutterCleaner {
     });
 
     await finished;
-    return { framesProcessed, framesChanged };
+
+    if (framesChanged === 0) {
+      // Nada foi removido: o arquivo gerado é uma recodificação do original,
+      // pixel por pixel equivalente mas degradada. Entregá-lo seria piorar o
+      // vídeo em troca de nada.
+      await this.discard(outputPath);
+      return { framesProcessed, framesChanged, produced: false };
+    }
+    return { framesProcessed, framesChanged, produced: true };
   }
 
   /** Detecta e apaga os objetos removíveis de UM quadro. Devolve o quadro (alterado ou não). */
@@ -310,7 +370,8 @@ export class FrameByFrameCleaner implements ClutterCleaner {
     width: number,
     height: number,
   ): Promise<{ buffer: Buffer; changed: boolean }> {
-    const objects = await this.detectRemovable(detector, frame, width, height);
+    const detected = await this.detectRemovable(detector, frame, width, height);
+    const objects = this.rememberDetections(detected);
     if (objects.length === 0) return { buffer: frame, changed: false };
     return {
       buffer: await this.eraseBoxes(session, frame, width, height, objects),

@@ -8,6 +8,16 @@ export interface ClutterCleanProgress {
 export interface ClutterCleanResult {
   framesProcessed: number;
   framesChanged: number;
+  /**
+   * `true` quando o vídeo limpo existe de fato em `outputPath`.
+   *
+   * `false` significa "não havia nada pra remover" — e nesse caso NENHUM
+   * arquivo é produzido, de propósito. Recodificar um vídeo sem alterar um
+   * pixel sequer só degrada: medido, uma passagem à toa dava PSNR ~46 dB, e
+   * o render final ainda recodifica por cima. Quem chama deve continuar
+   * usando o vídeo original.
+   */
+  produced: boolean;
 }
 
 /**

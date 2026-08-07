@@ -241,6 +241,29 @@ reconhecíveis*, não arruma bagunça.
 Em compensação, o pior caso deixou de ser "estraga o vídeo do cliente" e
 passou a ser "não remove tudo" — e essa troca é o ponto todo.
 
+### Nunca degradar quem não tinha nada pra remover
+
+Defeito real encontrado medindo, não revisando: o vídeo era **recodificado
+inteiro mesmo com zero quadros alterados**. Medido nas três amostras
+mobiliadas, PSNR ~46 dB de perda em troca de absolutamente nada — e o
+`RenderingEngine` ainda recodifica por cima, empilhando perda de geração num
+vídeo que o cliente vai publicar.
+
+Três correções:
+
+* **Nada removido ⇒ nenhum arquivo produzido.** `clean()` devolve
+  `produced: false` e apaga o intermediário; o caso de uso segue com o vídeo
+  original. Verificado: hash do original inalterado, arquivo de saída
+  inexistente.
+* **Intermediário em CRF 16** (contra o padrão 23), porque ele ainda passa
+  por uma segunda codificação.
+* **Memória de detecção** (`DETECTION_MEMORY_FRAMES`): detector de objeto
+  oscila em torno do limiar, e um objeto que some por um quadro e volta no
+  seguinte reapareceria *piscando* — deformação pior que não ter removido
+  nada. Um objeto continua sendo apagado por até 4 quadros depois de perdido
+  de vista. A memória é causal (só olha pro passado), então não exige
+  adiantar quadros nem quebra o streaming.
+
 ### Streaming e custo
 
 ffmpeg -> stdin/stdout -> ffmpeg, sem despejar milhares de PNGs no disco.

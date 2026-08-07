@@ -174,7 +174,7 @@ export class RenderPreviewUseCase {
       nextStage();
       const cleanedPath = join(this.rendersDir, `${input.projectId}-limpo.mp4`);
       const cleaner = this.clutterCleaner as ClutterCleaner;
-      const { framesProcessed, framesChanged } = await cleaner.clean(
+      const { framesProcessed, framesChanged, produced } = await cleaner.clean(
         sourcePath,
         cleanedPath,
         (progress) => {
@@ -187,11 +187,14 @@ export class RenderPreviewUseCase {
           }
         },
       );
-      renderSourcePath = cleanedPath;
+      // Só troca a fonte se algo foi de fato removido. Sem isso, um vídeo já
+      // limpo passaria por uma recodificação inútil e sairia pior do que
+      // entrou.
+      if (produced) renderSourcePath = cleanedPath;
       appliedCorrections.push(
-        framesChanged > 0
+        produced
           ? `Objetos soltos removidos com IA em ${framesChanged} de ${framesProcessed} quadros (reconstrução quadro a quadro, acompanha a câmera em movimento).`
-          : "Nenhum objeto solto encontrado — móveis, eletrodomésticos e acabamentos nunca são removidos, então o vídeo foi mantido como está.",
+          : "Nenhum objeto solto encontrado — móveis, eletrodomésticos, plantas e acabamentos nunca são removidos, então o vídeo original foi mantido intacto.",
       );
       emit(100);
     }
