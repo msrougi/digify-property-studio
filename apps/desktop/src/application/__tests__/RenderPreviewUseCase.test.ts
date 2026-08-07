@@ -313,7 +313,7 @@ describe("RenderPreviewUseCase", () => {
     expect(discarded).toEqual([cleanedPath]);
     expect(cleanedPath).not.toBe(sourcePath);
 
-    expect(stagesSeen[1]).toBe("Limpando a bagunça com IA (quadro a quadro)");
+    expect(stagesSeen[1]).toBe("Removendo objetos soltos com IA (quadro a quadro)");
     expect(stagesSeen.at(-1)).toBe("Renderizando vídeo final");
     expect(result.appliedCorrections.join(" ")).toContain("7 de 10 quadros");
   });
@@ -368,7 +368,7 @@ describe("RenderPreviewUseCase", () => {
 
     expect(cleanCalled).toBe(false);
     expect(stagesSeen).toContain("Removendo itens temporários");
-    expect(stagesSeen).not.toContain("Limpando a bagunça com IA (quadro a quadro)");
+    expect(stagesSeen).not.toContain("Removendo objetos soltos com IA (quadro a quadro)");
   });
 
   it("lança erro de domínio quando o projeto não existe", async () => {

@@ -115,10 +115,13 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
       sceneRepository,
       objectRepository,
       renderRepository,
-      // Mesmo modelo do HomeStagingActCapability. Quando ele não está montado,
-      // `isAvailable()` devolve false e o render cai no caminho antigo em vez
-      // de falhar.
-      new FrameByFrameCleaner(join(modelsDir, "lama_inpainting.onnx")),
+      // Precisa dos DOIS modelos: o YOLOX decide o que pode ser apagado e o
+      // LaMa reconstrói o buraco. Faltando qualquer um, `isAvailable()` devolve
+      // false e o render cai no caminho antigo em vez de falhar.
+      new FrameByFrameCleaner(
+        join(modelsDir, "lama_inpainting.onnx"),
+        join(modelsDir, "yolox_nano.onnx"),
+      ),
     ),
     exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,

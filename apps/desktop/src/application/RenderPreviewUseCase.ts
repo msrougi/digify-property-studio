@@ -114,7 +114,7 @@ export class RenderPreviewUseCase {
     // Nome próprio porque a experiência é outra: esta etapa reconstrói cada
     // quadro com IA e leva minutos, não segundos. Chamá-la do mesmo jeito que
     // a versão rápida faria o usuário achar que o app travou.
-    if (frameByFrame) stages.push("Limpando a bagunça com IA (quadro a quadro)");
+    if (frameByFrame) stages.push("Removendo objetos soltos com IA (quadro a quadro)");
     if (input.applySharpen) stages.push("Aplicando nitidez");
     if (input.applyReflection) stages.push("Reduzindo reflexo");
     if (input.applyHomeStaging && !frameByFrame) stages.push("Removendo itens temporários");
@@ -190,8 +190,8 @@ export class RenderPreviewUseCase {
       renderSourcePath = cleanedPath;
       appliedCorrections.push(
         framesChanged > 0
-          ? `Bagunça removida com IA em ${framesChanged} de ${framesProcessed} quadros (reconstrução quadro a quadro, acompanha a câmera em movimento).`
-          : "Nenhuma bagunça encontrada nos quadros analisados — vídeo mantido como está.",
+          ? `Objetos soltos removidos com IA em ${framesChanged} de ${framesProcessed} quadros (reconstrução quadro a quadro, acompanha a câmera em movimento).`
+          : "Nenhum objeto solto encontrado — móveis, eletrodomésticos e acabamentos nunca são removidos, então o vídeo foi mantido como está.",
       );
       emit(100);
     }

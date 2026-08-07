@@ -152,7 +152,7 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
             onChange={(event) => setApplyHomeStaging(event.target.checked)}
             disabled={status === "rendering"}
           />
-          Limpar a bagunça (IA)
+          Remover objetos soltos (IA)
         </label>
         <label className="render-panel__checkbox">
           <input
@@ -180,8 +180,10 @@ export function RenderPanel({ projectId, projectName, sourceVideoPath }: RenderP
           // com IA. Sem isso o usuário marca a caixa achando que é rápido como
           // as outras e conclui que o app travou.
           <p className="render-panel__hint">
-            A limpeza reconstrói cada quadro com IA — leva vários minutos (cerca
-            de 15 num vídeo de 1min30). As outras opções são rápidas.
+            Remove objetos soltos reconhecidos (louça, sacolas, pertences) e
+            reconstrói o fundo com IA. Nunca mexe em móveis, eletrodomésticos,
+            plantas ou acabamentos. Leva vários minutos — as outras opções são
+            rápidas.
           </p>
         ) : null}
       </div>

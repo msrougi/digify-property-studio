@@ -3,21 +3,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { generateMovingClutteredTestVideo } from "../../../test-support/generateMovingClutteredTestVideo.js";
-import { extractGrayscaleFrame } from "../../ffmpeg/extractGrayscaleFrame.js";
+import { extractRgbFrame } from "../../ffmpeg/extractRgbFrame.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
 import { FrameByFrameCleaner } from "../FrameByFrameCleaner.js";
 
-const MODEL_PATH = join(process.cwd(), "models", "lama_inpainting.onnx");
-// O modelo (~196MB) é remontado a partir de models/*.parts no build. Onde ele
+const LAMA_PATH = join(process.cwd(), "models", "lama_inpainting.onnx");
+const YOLOX_PATH = join(process.cwd(), "models", "yolox_nano.onnx");
+// O LaMa (~196MB) é remontado a partir de models/*.parts no build. Onde ele
 // não estiver montado, o teste não tem o que verificar — pular é honesto,
 // inventar um dublê de inferência não seria.
-const describeWithModel = existsSync(MODEL_PATH) ? describe : describe.skip;
+const describeWithModels =
+  existsSync(LAMA_PATH) && existsSync(YOLOX_PATH) ? describe : describe.skip;
 
 const WIDTH = 320;
 const HEIGHT = 240;
-const PATCH = { x: 40, y: 60, width: 90, height: 70, driftPxPerSec: 60 };
 
-/** Variância da luma: mede quanto "ruído visual" (bagunça) sobrou na região. */
+/** Variância da luma: mede quanto "detalhe" existe numa região. */
 function variance(
   buffer: Buffer,
   width: number,
@@ -33,24 +34,50 @@ function variance(
   return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
 }
 
-describeWithModel("FrameByFrameCleaner", () => {
+describeWithModels("FrameByFrameCleaner", () => {
   it(
-    "limpa a bagunça mesmo com a câmera em movimento (o caso que o overlay estático não resolvia)",
+    "não toca em cômodo mobiliado sem objeto solto — a regressão que motivou trocar textura por semântica",
+    async () => {
+      // Estes três vídeos são cômodos reais, bem montados, SEM bagunça. A
+      // versão por anomalia de textura borrava a coifa, apagava o lustre e a
+      // planta justamente aqui: pra ela, "textura diferente de parede" era
+      // sinônimo de sujeira. Detecção semântica não tem como cometer esse
+      // erro, e este teste existe pra garantir que não volte.
+      const dir = mkdtempSync(join(tmpdir(), "digify-fbf-mobiliado-"));
+      const fixtures = join(process.cwd(), "src", "infrastructure", "capabilities", "__fixtures__");
+
+      for (const room of ["kitchen", "bedroom", "bathroom"]) {
+        const sourcePath = join(fixtures, `${room}-sample.mp4`);
+        const outputPath = join(dir, `${room}.mp4`);
+
+        const cleaner = new FrameByFrameCleaner(LAMA_PATH, YOLOX_PATH);
+        const { framesChanged, framesProcessed } = await cleaner.clean(sourcePath, outputPath);
+
+        expect(framesProcessed).toBeGreaterThan(0);
+        // Nenhum quadro alterado: não há objeto solto pra remover nesses cômodos.
+        expect({ room, framesChanged }).toEqual({ room, framesChanged: 0 });
+      }
+    },
+    300_000,
+  );
+
+  it(
+    "preserva dimensões, duração e reporta progresso de todos os quadros",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "digify-fbf-"));
-      const sourcePath = join(dir, "cluttered.mp4");
-      const outputPath = join(dir, "clean.mp4");
+      const sourcePath = join(dir, "sala.mp4");
+      const outputPath = join(dir, "limpa.mp4");
 
       await generateMovingClutteredTestVideo(
         sourcePath,
         { width: WIDTH, height: HEIGHT },
-        PATCH,
+        { x: 40, y: 60, width: 90, height: 70, driftPxPerSec: 60 },
         1,
         10,
       );
 
       const progress: number[] = [];
-      const cleaner = new FrameByFrameCleaner(MODEL_PATH);
+      const cleaner = new FrameByFrameCleaner(LAMA_PATH, YOLOX_PATH);
       expect(cleaner.isAvailable()).toBe(true);
       await cleaner.clean(sourcePath, outputPath, (update) =>
         progress.push(update.framesProcessed),
@@ -62,50 +89,81 @@ describeWithModel("FrameByFrameCleaner", () => {
       expect(outputMeta.height).toBe(sourceMeta.height);
       expect(outputMeta.durationMs).toBeGreaterThanOrEqual(sourceMeta.durationMs - 200);
 
-      // Todo quadro tem que passar pelo pipeline — se algum escapasse, a
-      // bagunça reapareceria piscando no vídeo final.
+      // Todo quadro tem que passar pelo pipeline — se algum escapasse, o
+      // objeto reapareceria piscando no vídeo final.
       expect(progress.length).toBe(10);
       expect(progress.at(-1)).toBe(10);
-
-      // Meio do vídeo: a essa altura o retângulo já andou ~30px, então esta
-      // caixa só cobre a bagunça se a detecção acompanhou o movimento.
-      const atMs = 500;
-      const box = { x: PATCH.x + 30, y: PATCH.y, width: PATCH.width, height: PATCH.height };
-      const { buffer: before } = await extractGrayscaleFrame(sourcePath, atMs, WIDTH, HEIGHT);
-      const { buffer: after } = await extractGrayscaleFrame(outputPath, atMs, WIDTH, HEIGHT);
-
-      const varianceBefore = variance(before, WIDTH, box);
-      const varianceAfter = variance(after, WIDTH, box);
-      expect(varianceBefore).toBeGreaterThan(1000);
-      // Uma queda de ordens de grandeza: a região passa de xadrez de alto
-      // contraste a superfície praticamente lisa.
-      expect(varianceAfter).toBeLessThan(varianceBefore / 100);
     },
     120_000,
   );
 
   it(
-    "não mexe num vídeo já limpo",
-    async () => {
-      const dir = mkdtempSync(join(tmpdir(), "digify-fbf-clean-"));
-      const sourcePath = join(dir, "plain.mp4");
-      const outputPath = join(dir, "out.mp4");
+    "sem modelo não se declara disponível — o render cai no caminho antigo em vez de falhar",
+    () => {
+      const inexistente = join(tmpdir(), "nao-existe-lama.onnx");
+      expect(new FrameByFrameCleaner(inexistente, YOLOX_PATH).isAvailable()).toBe(false);
+      expect(new FrameByFrameCleaner(LAMA_PATH, inexistente).isAvailable()).toBe(false);
+      expect(new FrameByFrameCleaner(LAMA_PATH, YOLOX_PATH).isAvailable()).toBe(true);
+    },
+  );
 
-      // Mesmo gerador, sem bagunça: retângulo de área zero.
-      await generateMovingClutteredTestVideo(
-        sourcePath,
-        { width: WIDTH, height: HEIGHT },
-        { x: 0, y: 0, width: 0, height: 0, driftPxPerSec: 0 },
-        1,
-        10,
+  it(
+    "apaga de verdade a caixa pedida e não encosta em nada fora dela",
+    async () => {
+      // Exercita o código que ALTERA pixel, direto, com uma caixa conhecida.
+      // Passar pelo detector aqui exigiria um vídeo de teste em que o YOLOX
+      // reconhecesse uma classe específica — dependência frágil pra provar
+      // uma coisa que não é sobre detecção.
+      const fixture = join(
+        process.cwd(),
+        "src",
+        "infrastructure",
+        "capabilities",
+        "__fixtures__",
+        "kitchen-sample.mp4",
+      );
+      const probe = await readVideoMetadata(fixture);
+      const frame = await extractRgbFrame(fixture, 500, probe.width, probe.height, probe.width);
+      const meta = { width: frame.width, height: frame.height };
+
+      const alvo = { x: 60, y: 90, width: 48, height: 56 };
+      const cleaner = new FrameByFrameCleaner(LAMA_PATH, YOLOX_PATH);
+      const session = await cleaner.openInpaintingSession();
+      const limpo = await cleaner.eraseBoxes(
+        session,
+        frame.buffer,
+        meta.width,
+        meta.height,
+        [alvo],
       );
 
-      const cleaner = new FrameByFrameCleaner(MODEL_PATH);
-      const { framesChanged } = await cleaner.clean(sourcePath, outputPath);
+      // Dentro da caixa: mudou de verdade (não é uma cópia devolvida intacta).
+      let mudouDentro = 0;
+      for (let y = alvo.y + 8; y < alvo.y + alvo.height - 8; y++) {
+        for (let x = alvo.x + 8; x < alvo.x + alvo.width - 8; x++) {
+          const i = (y * meta.width + x) * 3;
+          if (Math.abs((limpo[i] as number) - (frame.buffer[i] as number)) > 3) mudouDentro++;
+        }
+      }
+      expect(mudouDentro).toBeGreaterThan(0);
 
-      expect(framesChanged).toBe(0);
-      expect((await readVideoMetadata(outputPath)).width).toBe(WIDTH);
+      // Longe da caixa: byte a byte idêntico. O remendo não pode vazar pro
+      // resto do cômodo — foi exatamente esse vazamento que estragou a versão
+      // anterior.
+      for (const [x, y] of [
+        [5, 5],
+        [meta.width - 6, 5],
+        [5, meta.height - 6],
+        [meta.width - 6, meta.height - 6],
+      ]) {
+        const i = ((y as number) * meta.width + (x as number)) * 3;
+        expect([limpo[i], limpo[i + 1], limpo[i + 2]]).toEqual([
+          frame.buffer[i],
+          frame.buffer[i + 1],
+          frame.buffer[i + 2],
+        ]);
+      }
     },
-    120_000,
+    180_000,
   );
 });

@@ -155,88 +155,142 @@ frame, descrita abaixo, seria mais completa) mas é real, honesta e resolve
 o sintoma mais grave (o "adesivo" óbvio) com custo de implementação e
 performance viáveis agora.
 
-## RESOLVIDO: reconstrução quadro a quadro (`FrameByFrameCleaner`)
+## RESOLVIDO: remoção semântica quadro a quadro (`FrameByFrameCleaner`)
 
-**Status: shipped.** O paliativo acima resolvia o "adesivo", mas ao custo
-de não limpar nada: com câmera em movimento a cena caía no `delogo`, que
-borra sem remover. O usuário voltou com o sintoma real — *"os vídeos não
-estão sendo limpos... o que não pode é ficar a bagunça que ainda está"*.
+**Status: shipped.** Chegar aqui custou duas tentativas erradas, e as duas
+valem registro porque cada uma parecia certa até encontrar vídeo real.
 
-Medição que fechou o diagnóstico: num vídeo real de passeio pela casa, a
-pontuação de movimento deu **16,2 contra um limiar de 12** — ou seja,
-praticamente *toda* cena era classificada como "em movimento" e caía no
-borrão. E vídeo de imóvel real é sempre assim: alguém caminhando pela
-casa. O caminho de IA existia, mas quase nunca era exercido.
+### Tentativa 1: um remendo por cena — falhou por causa do movimento
 
-**Fix real**: `FrameByFrameCleaner.ts` abandona a ideia de um remendo por
-cena. Cada quadro é detectado e reconstruído por conta própria, então
-movimento de câmera deixa de ser uma condição a evitar — vira irrelevante.
+O paliativo do `sceneIsStatic` resolvia o "adesivo", mas ao custo de não
+limpar nada: com câmera em movimento a cena caía no `delogo`, que borra sem
+remover. Medição que fechou o diagnóstico: num vídeo real de passeio pela
+casa, a pontuação de movimento deu **16,2 contra um limiar de 12** — ou
+seja, praticamente *toda* cena caía no borrão. E vídeo de imóvel real é
+sempre assim: alguém caminhando pela casa.
 
-Como funciona:
+### Tentativa 2: quadro a quadro por anomalia de textura — falhou pior
 
-1. `ffmpeg` decodifica pra `rawvideo` no stdout; nada de despejar milhares
-   de PNGs no disco.
-2. Cada quadro passa por `detectClutterRegions` num limiar agressivo
-   (2,5 — ver `docs/ml/CLUTTER_DETECTION.md`).
-3. A união das regiões + 25% de margem de contexto é recortada,
-   reduzida a 128×128, e vai pro LaMa real.
-4. O resultado é ampliado de volta e composto **só dentro das regiões
-   detectadas** — a vizinhança serviu de contexto e fica intocada.
-5. `ffmpeg` reencoda pelo stdin, remapeando o áudio do original
-   (`-map 0:v -map 1:a?`): reconstruir o vídeo não pode silenciá-lo.
+Passar a reconstruir cada quadro por conta própria resolveu o movimento.
+Mas a escolha de *o que* apagar continuou sendo `detectClutterRegions`
+(Sobel + estatística robusta), num limiar agressivo. Resultado nos vídeos
+reais: **coifa borrada, lustre apagado, planta apagada, backsplash sujo** —
+em cômodos que não tinham bagunça nenhuma.
 
+Dois defeitos de implementação pioravam o quadro, e vale saber que existiam
+porque o teste original não os pegou:
+
+* **A união das regiões dava 90–100% do quadro.** Com a bagunça espalhada
+  (o caso normal), recortar a união = recortar o quadro inteiro, encolher
+  pra 128px e ampliar de volta. Num vídeo 1080p, ampliação de ~15x.
+* **Esmagamento de proporção de 33–49%.** Um recorte 320x215 era enfiado
+  num quadrado 128x128 e devolvido esticado. O modelo via geometria
+  distorcida e devolvia distorção junto com o preenchimento.
+
+O teste passava porque usava **uma** mancha compacta: a união ficava
+pequena e quase quadrada. Ele validou a geometria fácil, não a real.
+
+Mas mesmo consertados os dois defeitos, o resultado continuava ruim — e aí
+está a lição que importa. O problema de fundo não era implementação:
+**anomalia de textura significa, na prática, "o que não for parede lisa"**.
+Num vídeo imobiliário isso é a mobília e os acabamentos, exatamente o que
+vende o imóvel. Nenhum limiar conserta, porque o algoritmo não sabe *o que*
+a coisa é. Era erro de categoria, não de calibragem.
+
+### O que funciona: deixar o detector decidir
+
+Quem escolhe o que apagar agora é o **YOLOX** — o mesmo modelo e as mesmas
+80 classes COCO que `object.detect` já usava. Só as classes listadas em
+`removableForCleaning.ts` podem ser apagadas: louça, comida, pertences
+pessoais, eletrônicos de mão. Móvel, eletrodoméstico, pessoa, animal,
+veículo e decoração que valoriza (planta, vaso, quadro, TV) nunca são
+tocados.
+
+Isso é literalmente o pedido original do usuário: *"ele tem que detectar
+tudo, deixar só os móveis e eletrodomésticos, nada que não seja isso."*
+
+Por que a lista é separada de `objectCategoryMapping.ts` (que já dividia as
+classes em categorias do domínio): aquele mapeamento alimenta relatório e
+score, onde listar um item errado é barato e reversível. Aqui a ação é
+destrutiva — some pixel do vídeo do cliente. Duas ações de risco diferente
+merecem listas diferentes, e a de apagar é deliberadamente mais curta.
+
+Três freios, todos por causa da assimetria de risco:
+
+* **Confiança mínima 0,5** pra apagar, contra 0,3 pra listar. Errar
+  listando é um item a mais numa lista; errar apagando é um buraco no
+  vídeo.
+* **Objeto acima de 15% do quadro nunca é apagado**, por mais confiante que
+  esteja o detector: um "livro" ocupando meio quadro é quase sempre
+  classificação errada de uma superfície grande.
+* **Classe desconhecida entra como protegida.** O comportamento seguro
+  diante do inesperado é não apagar.
+
+E os dois defeitos de geometria foram corrigidos de vez: a janela de
+inferência é sempre **quadrada** (nunca esmaga) e limitada a 2,5× o tamanho
+do modelo (nunca amplia uma miniatura). Objeto pequeno com bastante
+contexto ao redor é exatamente o regime em que o LaMa funciona bem — o
+oposto do que a tentativa 2 fazia.
+
+### Limitação honesta
+
+Pilha de roupa no chão **não tem classe no COCO**, então não é removida.
+Nem caixa de papelão, nem papel espalhado. O produto tira *objetos soltos
+reconhecíveis*, não arruma bagunça.
+
+Em compensação, o pior caso deixou de ser "estraga o vídeo do cliente" e
+passou a ser "não remove tudo" — e essa troca é o ponto todo.
+
+### Streaming e custo
+
+ffmpeg -> stdin/stdout -> ffmpeg, sem despejar milhares de PNGs no disco.
 Detalhes que não são opcionais:
 
 * **Contrapressão.** Sem pausar o decoder, ele despeja o vídeo inteiro na
-  memória enquanto a inferência (ordens de grandeza mais lenta) fica pra
-  trás. O leitor só volta quando a fila esvazia, e a memória fica
-  constante.
-* **Serialização.** `session.run` não é seguro pra chamadas concorrentes
-  na mesma sessão, e sem fila os quadros sairiam fora de ordem.
+  memória enquanto a inferência fica pra trás. O leitor só volta quando a
+  fila esvazia, e a memória fica constante.
+* **Serialização.** `session.run` não é seguro pra chamadas concorrentes na
+  mesma sessão, e sem fila os quadros sairiam fora de ordem.
 * **Ida e volta sem escorregar.** `resizeRgb.ts` mapeia pelo centro do
-  pixel (`(x + 0.5) * escala - 0.5`); sem isso a imagem escorrega meio
-  pixel a cada redimensionamento — e aqui sempre há dois, então o erro
-  dobraria e o remendo ficaria deslocado do que ele cobre.
-* **Limite pela máscara, não pelo recorte.** Se a área a reconstruir passa
-  de 60% do quadro, não sobrou vizinhança de onde reconstruir e o quadro
-  passa intacto (sinal de corte/estouro de luz, não de bagunça). O limite
-  é sobre a *máscara* de propósito: regiões espalhadas pelo quadro inteiro
-  dão um recorte grande com máscara pequena — e esse quadro *precisa* ser
-  limpo.
+  pixel; sem isso a imagem escorrega meio pixel a cada redimensionamento —
+  e aqui sempre há dois, então o erro dobraria.
+* **Áudio preservado** (`-map 0:v -map 1:a?`): reconstruir o vídeo não pode
+  silenciá-lo.
 
-**O custo, aceito explicitamente pelo usuário**: ~390ms por quadro
-(medido), ou seja cerca de 15–18 minutos pra um vídeo de 1min30. Por isso
-`RenderPreviewUseCase` reporta progresso real por quadro pelo canal
-`StageProgress`, a barra estima o tempo restante a partir do ritmo medido,
-e o painel avisa do custo *antes* de começar — uma barra que anda devagar
-sem previsão é indistinguível de um app travado.
+O LaMa custa ~346ms por remendo e **é travado em lote 1** (verificado:
+lote 2 e 4 são rejeitados pelo próprio grafo), então cada objeto removido
+soma tempo direto. Na prática isso pesa pouco, porque a maioria dos quadros
+de um imóvel apresentável não tem objeto removível nenhum e passa direto —
+só o YOLOX roda.
 
 **Ordem importa**: a limpeza roda como pré-passo, *antes* de reflexo e
-perspectiva, e o vídeo limpo vira a fonte de tudo que vem depois. O
-overlay de reflexo é um recorte do frame original cobrindo o quadro
-inteiro — colado sobre o vídeo já limpo, traria a bagunça de volta.
+perspectiva, e o vídeo limpo vira a fonte de tudo que vem depois. O overlay
+de reflexo é um recorte do frame original cobrindo o quadro inteiro —
+colado sobre o vídeo já limpo, traria os objetos de volta.
 
 O intermediário é descartado em `finally` assim que o render final termina
-(ou falha): é um vídeo inteiro a mais no disco, e o app é efêmero por
-decisão de produto.
-
-Quando o modelo de 196MB não está montado, `isAvailable()` devolve `false`
-e o render cai no caminho antigo por cena em vez de falhar.
+(ou falha). Faltando qualquer um dos dois modelos, `isAvailable()` devolve
+`false` e o render cai no caminho antigo em vez de falhar.
 
 ### Verificação
 
-* `FrameByFrameCleaner.test.ts` — vídeo real gerado via FFmpeg com um
-  retângulo de xadrez que **anda** ao longo do tempo (exatamente a
-  condição que o caminho antigo não resolvia). A variância na região da
-  bagunça cai de **15.535 para 0,4**; todo quadro passa pelo pipeline; um
-  vídeo sem bagunça sai com zero quadros alterados.
-* `RenderPreviewUseCase.test.ts` — prova a orquestração: a limpeza parte
-  do vídeo do usuário, o render final parte do vídeo limpo, o
-  intermediário é descartado, e sem modelo o caminho antigo é mantido.
-* Rodado nas três amostras reais de cômodo do repositório: 100% dos
-  quadros alterados, ~390ms/quadro, 12–16% do quadro reconstruído, com
-  perda de nitidez localizada nos remendos e não global (tabela em
-  `docs/ml/CLUTTER_DETECTION.md`).
+* **A regressão que mais importa**: rodado nas três amostras reais de
+  cômodo (cozinha, quarto, banheiro — todas mobiliadas, nenhuma com
+  bagunça). O YOLOX encontra só coisa protegida (planta, micro-ondas,
+  forno, sofá, TV, pia, vaso) e **zero quadros são alterados**. A coifa e o
+  lustre não têm mais como ser apagados.
+* `eraseBoxes` exercitado direto com uma caixa conhecida: pixels dentro
+  mudam, e os quatro cantos do quadro continuam byte a byte idênticos — o
+  remendo não vaza.
+* `removableForCleaning.test.ts`: cama, sofá, pia, vaso, geladeira, planta,
+  TV, pessoa, gato, carro nunca removíveis; garrafa, copo, mochila, mala,
+  livro, laptop, controle removíveis; invariante cruzado com o mapeamento
+  do domínio garantindo que nada classificado como pessoa/animal/veículo
+  passe; classe desconhecida entra protegida.
+* Dimensões, duração e progresso de todos os quadros preservados.
+* Orquestração no `RenderPreviewUseCase`: limpeza parte do vídeo do
+  usuário, render final parte do vídeo limpo, intermediário descartado, e
+  sem modelo o caminho antigo é mantido.
 
 ## RESOLVIDO: o conflito Mac Intel × LaMa (corrigindo o modelo, não o runtime)
 
@@ -353,14 +407,16 @@ documentados acima.
 
 O que continua em aberto na limpeza:
 
+* **O vocabulário do COCO é o teto.** Pilha de roupa, caixa de papelão e
+  papel espalhado não têm classe, então não são removidos. Subir daqui
+  exige um modelo de vocabulário aberto (GroundingDINO, OWL-ViT) ou
+  segmentação (SAM) — muito mais pesados que o YOLOX-Nano, provavelmente
+  inviáveis em CPU dentro de um orçamento de minutos.
 * **Coerência temporal.** Cada quadro é reconstruído isoladamente, então o
-  conteúdo inventado pode variar de um quadro pro outro (cintilação) numa
-  região grande. Não observado como problema nas amostras testadas, mas é
-  a limitação estrutural da abordagem.
-* **Resolução da inferência.** 128px é uma escolha de custo: 256px
-  triplicaria o tempo (979ms/quadro medido) e o vídeo já leva ~15 min.
-  Regiões grandes ficam visivelmente mais macias que o entorno.
-* **A detecção continua sendo textura, não reconhecimento.** Ela não sabe
-  que aquilo é uma pilha de roupa — só que destoa. A regra de produto
-  ("na dúvida, tira") torna isso aceitável, mas significa que um móvel
-  muito texturizado pode ser reconstruído junto.
+  conteúdo inventado pode variar de um quadro pro outro numa região grande.
+  Resolver de verdade exige um modelo de inpainting de vídeo (ProPainter e
+  parentes), que assume GPU.
+* **Resolução da inferência.** 128px é escolha de custo: 256px triplica o
+  tempo (979ms por remendo, medido). Objeto grande removido fica
+  visivelmente mais macio que o entorno — outro motivo pro limite de 15%
+  de área.

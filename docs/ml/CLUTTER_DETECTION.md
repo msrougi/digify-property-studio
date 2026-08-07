@@ -135,35 +135,30 @@ duplicar o mesmo item físico várias vezes na lista de objetos removíveis).
   reconstrução, documentada em `docs/ml/HOME_STAGING.md` — este algoritmo
   só decide "onde", não "como remover melhor".
 
-## Dois limiares, dois propósitos
+## Este algoritmo NÃO é usado pra apagar nada
 
-O mesmo algoritmo é usado com agressividades diferentes, de propósito:
+Importante, porque já foi: `detectClutterRegions` alimenta apenas o
+**relatório** (lista de itens e Property Score). Ele não decide mais o que
+sai do vídeo.
 
-| Quem usa | Limiar | Por quê |
-|----------|--------|---------|
-| `clutter.detect` (relatório/score) | 3,5 + concordância entre frames | Só *aponta* bagunça numa lista pro usuário. Um falso positivo aqui é uma acusação errada sobre o imóvel. |
-| `FrameByFrameCleaner` (limpeza) | 2,5 | *Reconstrói* a região. A regra de produto é "na dúvida, tira": some um móvel e tudo bem, o que não pode é sobrar sujeira. |
+Uma versão do `FrameByFrameCleaner` usava esta mesma heurística pra escolher
+o que apagar. Testada nos vídeos reais, ela **borrou a coifa, apagou o
+lustre e a planta, e sujou o backsplash** — em cômodos que não tinham
+bagunça nenhuma. O motivo é estrutural: anomalia de textura significa, na
+prática, "o que não for parede lisa", e num vídeo imobiliário isso é a
+mobília e os acabamentos. Nenhum limiar conserta, porque o algoritmo não
+sabe *o que* a coisa é.
 
-Varredura real feita nos vídeos de imóvel do usuário (fração do quadro
-marcada como bagunça):
+Hoje quem decide o que apagar é o YOLOX, por classe COCO — ver
+`docs/ml/HOME_STAGING.md`. A regra virou: **medir textura serve pra
+apontar; só reconhecimento semântico autoriza destruir pixel.**
 
-| limiar | cobertura |
-|--------|-----------|
-| 5,0    | 0–1%      |
-| 3,5    | 7–8%      |
-| 2,5    | 12–17%    |
-| 2,0    | 20–27%    |
+## Por que o relatório não ficou em 5,0
 
 Foi o 5,0 que produziu o "100/100, 0 objetos detectados" num vídeo
-visivelmente bagunçado. Daí o parâmetro `zScoreThreshold` existir — em vez
-de um número só servindo mal aos dois usos.
-
-### Por que o relatório não ficou em 5,0
-
-Medido nas três amostras reais de cômodo com o limiar 5,0: **0, 0 e 1
-região**. Ou seja, o relatório dizia "nada pra tirar" em cômodos onde a
-limpeza depois reconstrói 12–16% de cada quadro. Uma incoerência que o
-usuário veria na tela.
+visivelmente bagunçado. Medido nas três amostras reais de cômodo com esse
+limiar: **0, 0 e 1 região** — o relatório dizia "nada pra tirar" em cômodos
+que o usuário via como sujos.
 
 Baixar o limiar sozinho não resolvia, porque ruído puro de sensor começa a
 disparar exatamente na mesma faixa (8 seeds determinísticas, ruído
@@ -188,16 +183,3 @@ Coberto por teste real: dois vídeos com a MESMA textura no MESMO lugar,
 um com a mancha o vídeo inteiro e outro só numa janela de 0,1s (que cai em
 cima de um único instante de amostragem). O primeiro é relatado, o segundo
 não.
-
-Medido nas três amostras reais de cômodo do repositório com o limiar 2,5,
-depois da limpeza quadro a quadro:
-
-| amostra  | regiões | cobertura | pixels alterados | nitidez (antes → depois) |
-|----------|---------|-----------|------------------|--------------------------|
-| kitchen  | 6       | 13,4%     | 9,5%             | 26,7 → 23,5              |
-| bedroom  | 4       | 16,1%     | 13,1%            | 32,5 → 26,2              |
-| bathroom | 6       | 11,7%     | 6,8%             | 31,4 → 28,9              |
-
-A perda de nitidez é localizada nos remendos (o LaMa roda a 128px e o
-resultado é ampliado de volta), não um borrão global — o resto do quadro
-não é tocado.
