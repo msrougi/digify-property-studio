@@ -1,0 +1,241 @@
+import { useEffect, useState } from "react";
+import { ProgressBar } from "./ProgressBar.js";
+import { VideoPlayer } from "./VideoPlayer.js";
+import { useElapsedTime } from "../useElapsedTime.js";
+
+/** Só o nome do arquivo — o caminho completo estoura a largura e não ajuda. */
+function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+function isPdf(path: string): boolean {
+  return path.toLowerCase().endsWith(".pdf");
+}
+
+const DURACOES = [2.5, 3.5, 5] as const;
+
+/**
+ * Monta um vídeo de anúncio a partir de fotos e PDFs.
+ *
+ * Diferente do painel de melhorias, aqui **nada é gerado por IA** — é
+ * composição determinística (movimento de câmera simulado, transição,
+ * legenda). Por isso não há aviso de risco nem de demora: o resultado é
+ * previsível e sai em segundos.
+ */
+export function SlideshowPanel(): JSX.Element {
+  const [arquivos, setArquivos] = useState<string[]>([]);
+  const [audio, setAudio] = useState<string | null>(null);
+  const [formatos, setFormatos] = useState<SlideshowFormatDTO[]>([]);
+  const [formato, setFormato] = useState<"feed" | "story" | "square">("feed");
+  const [duracao, setDuracao] = useState<number>(3.5);
+  const [usarTextoPdf, setUsarTextoPdf] = useState(true);
+  const [status, setStatus] = useState<"idle" | "criando" | "pronto" | "erro">("idle");
+  const [erro, setErro] = useState<string | null>(null);
+  const [progresso, setProgresso] = useState<StageProgressDTO | null>(null);
+  const elapsedMs = useElapsedTime(status === "criando");
+  const [resultado, setResultado] = useState<SlideshowDTO | null>(null);
+  const [salvoEm, setSalvoEm] = useState<string | null>(null);
+
+  useEffect(() => {
+    void window.digify.getSlideshowFormats().then(setFormatos);
+  }, []);
+
+  const temPdf = arquivos.some(isPdf);
+
+  async function adicionarArquivos(): Promise<void> {
+    const escolhidos = await window.digify.selectSlideshowFiles();
+    if (escolhidos.length === 0) return;
+    // Concatena em vez de substituir: o usuário costuma escolher as fotos de
+    // um cômodo por vez.
+    setArquivos((atuais) => [...atuais, ...escolhidos]);
+    setStatus("idle");
+    setResultado(null);
+  }
+
+  function mover(indice: number, direcao: -1 | 1): void {
+    const destino = indice + direcao;
+    if (destino < 0 || destino >= arquivos.length) return;
+    setArquivos((atuais) => {
+      const copia = [...atuais];
+      const [item] = copia.splice(indice, 1);
+      copia.splice(destino, 0, item as string);
+      return copia;
+    });
+  }
+
+  function remover(indice: number): void {
+    setArquivos((atuais) => atuais.filter((_, i) => i !== indice));
+  }
+
+  async function criar(): Promise<void> {
+    setStatus("criando");
+    setErro(null);
+    setProgresso(null);
+    setSalvoEm(null);
+    try {
+      const criado = await window.digify.createSlideshow(
+        {
+          filePaths: arquivos,
+          format: formato,
+          slideDurationSec: duracao,
+          usePdfTextAsCaption: usarTextoPdf,
+          ...(audio ? { audioPath: audio } : {}),
+        },
+        setProgresso,
+      );
+      setResultado(criado);
+      setStatus("pronto");
+    } catch (error) {
+      console.error(error);
+      setErro(error instanceof Error ? error.message : "Não conseguimos montar o vídeo.");
+      setStatus("erro");
+    }
+  }
+
+  async function salvar(): Promise<void> {
+    if (!resultado) return;
+    const destino = await window.digify.saveSlideshow(resultado.outputPath);
+    if (destino) setSalvoEm(destino);
+  }
+
+  return (
+    <section>
+      <h2 className="section-title">Criar vídeo a partir de fotos e PDF</h2>
+
+      <div className="slideshow">
+        <div className="render-panel__controls">
+          <button className="button-primary" onClick={adicionarArquivos} disabled={status === "criando"}>
+            Adicionar fotos / PDF
+          </button>
+
+          <select
+            className="select"
+            value={formato}
+            onChange={(event) => setFormato(event.target.value as typeof formato)}
+            disabled={status === "criando"}
+          >
+            {formatos.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="select"
+            value={duracao}
+            onChange={(event) => setDuracao(Number(event.target.value))}
+            disabled={status === "criando"}
+          >
+            {DURACOES.map((segundos) => (
+              <option key={segundos} value={segundos}>
+                {segundos}s por imagem
+              </option>
+            ))}
+          </select>
+
+          <button
+            className="select"
+            onClick={async () => setAudio(await window.digify.selectSlideshowAudio())}
+            disabled={status === "criando"}
+          >
+            {audio ? `♪ ${baseName(audio)}` : "Adicionar música"}
+          </button>
+
+          {temPdf ? (
+            <label className="render-panel__checkbox">
+              <input
+                type="checkbox"
+                checked={usarTextoPdf}
+                onChange={(event) => setUsarTextoPdf(event.target.checked)}
+                disabled={status === "criando"}
+              />
+              Usar o texto do PDF como legenda
+            </label>
+          ) : null}
+
+          <button
+            className="button-primary"
+            onClick={criar}
+            disabled={status === "criando" || arquivos.length === 0}
+          >
+            {status === "criando" ? "Montando…" : "Montar vídeo"}
+          </button>
+        </div>
+
+        {arquivos.length === 0 ? (
+          <p className="empty-state">
+            Adicione as fotos do imóvel e, se quiser, o PDF do anúncio. A ordem da lista é a
+            ordem do vídeo.
+          </p>
+        ) : (
+          <ol className="slideshow__lista">
+            {arquivos.map((caminho, indice) => (
+              <li key={`${caminho}-${indice}`} className="slideshow__item">
+                <span className="slideshow__tipo">{isPdf(caminho) ? "PDF" : "FOTO"}</span>
+                <span className="slideshow__nome">{baseName(caminho)}</span>
+                <span className="slideshow__acoes">
+                  <button
+                    onClick={() => mover(indice, -1)}
+                    disabled={indice === 0 || status === "criando"}
+                    aria-label="Mover para cima"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => mover(indice, 1)}
+                    disabled={indice === arquivos.length - 1 || status === "criando"}
+                    aria-label="Mover para baixo"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => remover(indice)}
+                    disabled={status === "criando"}
+                    aria-label="Remover"
+                  >
+                    ✕
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {status === "criando" && progresso && (
+          <ProgressBar
+            stage={progresso.stage}
+            stageIndex={progresso.stageIndex}
+            totalStages={progresso.totalStages}
+            percent={progresso.percent}
+            elapsedMs={elapsedMs}
+          />
+        )}
+
+        {status === "erro" && <p style={{ color: "#ff6b6b" }}>{erro}</p>}
+
+        {status === "pronto" && resultado && (
+          <div className="render-panel__result">
+            <p className="render-panel__result-title">Vídeo pronto</p>
+            <ul>
+              <li>
+                {resultado.slideCount} imagem(ns)
+                {resultado.pdfPageCount > 0
+                  ? `, sendo ${resultado.pdfPageCount} página(s) de PDF`
+                  : ""}
+              </li>
+              <li>{resultado.durationSec.toFixed(1)} segundos</li>
+            </ul>
+            <VideoPlayer filePath={resultado.outputPath} label="Vídeo montado" />
+            <div className="render-panel__controls" style={{ marginTop: 12 }}>
+              <button className="button-primary" onClick={salvar}>
+                Salvar vídeo
+              </button>
+            </div>
+            {salvoEm ? <p className="render-panel__result-path">Salvo em: {salvoEm}</p> : null}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

@@ -16,6 +16,7 @@ import { PropertyScoreUseCase } from "../application/PropertyScoreUseCase.js";
 import { ImportAndAnalyzeVideoUseCase } from "../application/ImportAndAnalyzeVideoUseCase.js";
 import { ListProjectsUseCase } from "../application/ListProjectsUseCase.js";
 import { RenderPreviewUseCase } from "../application/RenderPreviewUseCase.js";
+import { CreateSlideshowUseCase } from "../application/CreateSlideshowUseCase.js";
 import { ExportVideoUseCase } from "../application/ExportVideoUseCase.js";
 import { IntakeCapability } from "./capabilities/IntakeCapability.js";
 import { SceneDetectCapability } from "./capabilities/SceneDetectCapability.js";
@@ -35,6 +36,7 @@ import { ReflectionActCapability } from "./capabilities/ReflectionActCapability.
 import { RenderingEngine } from "./render/RenderingEngine.js";
 import { DiskRenderedFileCleaner } from "./render/DiskRenderedFileCleaner.js";
 import { FrameByFrameCleaner } from "./render/FrameByFrameCleaner.js";
+import { SlideshowRenderer } from "./render/SlideshowRenderer.js";
 
 /**
  * Composition root — o único lugar que instancia infraestrutura concreta e a
@@ -66,6 +68,11 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
 
   const rendersDir = join(userDataDir, "renders");
   mkdirSync(rendersDir, { recursive: true });
+
+  // Vídeos montados a partir de fotos/PDF. Efêmero igual ao resto:
+  // `clearSessionData` leva esta pasta embora ao sair.
+  const slideshowDir = join(userDataDir, "slideshow");
+  mkdirSync(slideshowDir, { recursive: true });
 
   // lama_inpainting.onnx (~196MB) não é versionado no git (acima do limite
   // de 100MB do GitHub) — ver tools/inpainting/README.md. Quando ausente,
@@ -123,6 +130,10 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
         join(modelsDir, "yolox_nano.onnx"),
       ),
     ),
+    // Criação de vídeo a partir de fotos/PDF. Fica junto dos renders porque o
+    // resultado é efêmero igual: `clearSessionData` leva os dois embora.
+    createSlideshow: new CreateSlideshowUseCase(new SlideshowRenderer(), slideshowDir),
+    slideshowDir,
     exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,
     objectRepository,

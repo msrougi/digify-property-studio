@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ImportPanel } from "./components/ImportPanel.js";
+import { SlideshowPanel } from "./components/SlideshowPanel.js";
 import { ProjectList } from "./components/ProjectList.js";
 import { Timeline } from "./components/Timeline.js";
 import { RenderPanel } from "./components/RenderPanel.js";
@@ -52,6 +53,8 @@ export function App(): JSX.Element {
       </header>
 
       <ImportPanel onImported={handleImported} />
+
+      <SlideshowPanel />
 
       <section>
         <ProjectList

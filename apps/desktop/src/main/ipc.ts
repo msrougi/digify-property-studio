@@ -1,9 +1,11 @@
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
 import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
 import { EXPORT_PRESETS, type ExportPresetId } from "../infrastructure/export/exportPresets.js";
+import { SLIDESHOW_FORMATS } from "../application/CreateSlideshowUseCase.js";
 import type { StageProgress } from "../application/progress.js";
 
 export interface ProgressEvent extends StageProgress {
@@ -65,6 +67,28 @@ export interface RenderDTO {
 export interface ExportVideoDTO {
   destinationPath: string;
   status: string;
+}
+
+export interface SlideshowFormatDTO {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+}
+
+export interface CreateSlideshowOptions {
+  filePaths: string[];
+  format?: "feed" | "story" | "square";
+  slideDurationSec?: number;
+  usePdfTextAsCaption?: boolean;
+  audioPath?: string;
+}
+
+export interface SlideshowDTO {
+  outputPath: string;
+  durationSec: number;
+  slideCount: number;
+  pdfPageCount: number;
 }
 
 export interface ExportPresetDTO {
@@ -223,6 +247,69 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
         ...(presetId ? { presetId } : {}),
       });
       return { destinationPath: savedPath, status: project.toProps().status };
+    },
+  );
+
+  handle("slideshow:selectFiles", async (): Promise<string[]> => {
+    const result = await dialog.showOpenDialog(window, {
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: "Fotos e PDF", extensions: ["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff", "heic", "pdf"] },
+      ],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+
+  handle("slideshow:selectAudio", async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog(window, {
+      properties: ["openFile"],
+      filters: [{ name: "Áudio", extensions: ["mp3", "m4a", "aac", "wav", "ogg"] }],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  handle("slideshow:getFormats", (): SlideshowFormatDTO[] =>
+    Object.entries(SLIDESHOW_FORMATS).map(([id, format]) => ({
+      id,
+      label: format.label,
+      width: format.width,
+      height: format.height,
+    })),
+  );
+
+  handle(
+    "slideshow:create",
+    async (
+      _event,
+      options: CreateSlideshowOptions,
+      operationId: string,
+    ): Promise<SlideshowDTO> => {
+      // Nome com timestamp: montar um vídeo novo não pode sobrescrever o que
+      // o usuário ainda não salvou.
+      const outputPath = join(app.slideshowDir, `anuncio-${Date.now()}.mp4`);
+      const result = await app.createSlideshow.execute(
+        { ...options, outputPath },
+        (progress) => {
+          window.webContents.send("progress:slideshow", {
+            operationId,
+            ...progress,
+          } satisfies ProgressEvent);
+        },
+      );
+      return result;
+    },
+  );
+
+  handle(
+    "slideshow:save",
+    async (_event, sourcePath: string): Promise<string | null> => {
+      const result = await dialog.showSaveDialog(window, {
+        defaultPath: "anuncio.mp4",
+        filters: [{ name: "Vídeo", extensions: ["mp4"] }],
+      });
+      if (result.canceled || !result.filePath) return null;
+      copyFileSync(sourcePath, result.filePath);
+      return result.filePath;
     },
   );
 

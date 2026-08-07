@@ -10,6 +10,9 @@ import type {
   ExportPresetDTO,
   ProgressEvent,
   RenderDTO,
+  SlideshowFormatDTO,
+  CreateSlideshowOptions,
+  SlideshowDTO,
 } from "../main/ipc.js";
 import { toMediaUrl } from "../shared/media.js";
 
@@ -20,7 +23,7 @@ import { toMediaUrl } from "../shared/media.js";
  * listener novo. Devolve a função de unsubscribe.
  */
 function subscribeToProgress(
-  channel: "progress:import" | "progress:render",
+  channel: "progress:import" | "progress:render" | "progress:slideshow",
   operationId: string,
   callback: (progress: Omit<ProgressEvent, "operationId">) => void,
 ): () => void {
@@ -92,6 +95,28 @@ const digifyApi = {
     ),
   getExportPresets: (): Promise<ExportPresetDTO[]> =>
     ipcRenderer.invoke("projects:getExportPresets"),
+
+  // --- Criação de vídeo a partir de fotos e PDF ---
+  selectSlideshowFiles: (): Promise<string[]> => ipcRenderer.invoke("slideshow:selectFiles"),
+  selectSlideshowAudio: (): Promise<string | null> => ipcRenderer.invoke("slideshow:selectAudio"),
+  getSlideshowFormats: (): Promise<SlideshowFormatDTO[]> =>
+    ipcRenderer.invoke("slideshow:getFormats"),
+  createSlideshow: async (
+    options: CreateSlideshowOptions,
+    onProgress?: (progress: Omit<ProgressEvent, "operationId">) => void,
+  ): Promise<SlideshowDTO> => {
+    const operationId = crypto.randomUUID();
+    const unsubscribe = onProgress
+      ? subscribeToProgress("progress:slideshow", operationId, onProgress)
+      : null;
+    try {
+      return await ipcRenderer.invoke("slideshow:create", options, operationId);
+    } finally {
+      unsubscribe?.();
+    }
+  },
+  saveSlideshow: (sourcePath: string): Promise<string | null> =>
+    ipcRenderer.invoke("slideshow:save", sourcePath),
   toMediaUrl,
 };
 

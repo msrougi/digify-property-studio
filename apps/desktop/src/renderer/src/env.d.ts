@@ -63,6 +63,28 @@ interface ExportVideoDTO {
   status: string;
 }
 
+interface SlideshowFormatDTO {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+}
+
+interface CreateSlideshowOptions {
+  filePaths: string[];
+  format?: "feed" | "story" | "square";
+  slideDurationSec?: number;
+  usePdfTextAsCaption?: boolean;
+  audioPath?: string;
+}
+
+interface SlideshowDTO {
+  outputPath: string;
+  durationSec: number;
+  slideCount: number;
+  pdfPageCount: number;
+}
+
 interface ExportPresetDTO {
   id: string;
   label: string;
@@ -105,6 +127,14 @@ interface DigifyApi {
     presetId?: string,
   ): Promise<ExportVideoDTO>;
   getExportPresets(): Promise<ExportPresetDTO[]>;
+  selectSlideshowFiles(): Promise<string[]>;
+  selectSlideshowAudio(): Promise<string | null>;
+  getSlideshowFormats(): Promise<SlideshowFormatDTO[]>;
+  createSlideshow(
+    options: CreateSlideshowOptions,
+    onProgress?: (progress: StageProgressDTO) => void,
+  ): Promise<SlideshowDTO>;
+  saveSlideshow(sourcePath: string): Promise<string | null>;
   toMediaUrl(absoluteFilePath: string): string;
 }
 

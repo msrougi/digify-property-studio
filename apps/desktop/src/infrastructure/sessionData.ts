@@ -14,6 +14,7 @@ const GENERATED_ENTRIES = [
   "digify.sqlite-wal",
   "digify.sqlite-shm",
   "renders",
+  "slideshow",
   "inpainting-patches",
   "reflection-patches",
 ];
