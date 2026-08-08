@@ -88,6 +88,38 @@ A janela virtual tem 1280px de largura de propósito — é largura de desktop,
 então o site entrega o layout "de computador". Em 400px viria o layout de
 celular, estreito e com tudo empilhado.
 
+### Preparar a página antes de fotografar
+
+Carregar a URL e fotografar direto **não funciona** para site de imóvel. Duas
+preparações, medidas numa reprodução do comportamento real:
+
+**1. Fechar o aviso de cookie (LGPD).** Praticamente todo site brasileiro
+abre com essa tarja. Sem fechá-la, o vídeo do corretor mostra "Aceitar
+cookies" cobrindo o imóvel — e, pior, muitos desses avisos deixam a página
+com `overflow: hidden`, o que impediria rolar pra carregar as fotos.
+
+Duas passadas, da mais segura pra menos: seletores exatos de plataformas
+conhecidas (OneTrust, Cookiebot, Osano…), depois botões com texto de aceite
+**dentro de um container que se identifica como cookie/consent/lgpd**. Essa
+restrição ao container é o que impede clicar num "Aceitar" de proposta ou
+contrato no meio do anúncio. Só então, o que sobrou cobrindo a tela é
+escondido — e de forma conservadora: apenas elemento fixo que cobre mais de
+metade da tela numa camada alta, porque um cabeçalho fino com o preço também
+é fixo e não pode sumir.
+
+**2. Rolar a página inteira.** Isto não é polimento. Medido: numa página com
+galeria `loading="lazy"`, sem rolar **só 3 de 8 fotos tinham carregado**. O
+vídeo sairia com retângulos cinza no lugar das fotos do imóvel — exatamente o
+que se quer mostrar. A rolagem também dispara os blocos com animação de
+entrada (`IntersectionObserver`), comuns em landing page de lançamento.
+
+Depois de rolar, volta ao topo. E como a captura redimensiona a janela para a
+altura total da página, no instante da foto **a página inteira está na
+viewport**, o que revela qualquer bloco que ainda dependesse disso.
+
+Medido no momento exato da captura: banner fechado, **8/8 fotos carregadas,
+8/8 blocos revelados** (contra 1/8 e 3/8 ao abrir).
+
 ### Título vira legenda
 
 Prioridade: `og:title` → `<title>` → primeiro `<h1>`. Só a **primeira** fatia
@@ -188,15 +220,26 @@ menos):
   `og:title` tem prioridade sobre `<title>`, a captura sai 1280x4920, vira
   3 fatias 16:9, o vídeo é montado, a janela é destruída sem travar, e a
   página não enxerga `require`/`process`/`window.digify`.
+* **Electron real (landing page de imóvel)**: página com aviso LGPD que trava
+  a rolagem, galeria `loading="lazy"` e blocos com `IntersectionObserver`.
+  Ao abrir: banner presente, rolagem travada, 3/8 fotos, 1/8 blocos. No
+  momento da captura: banner fechado, rolagem liberada, **8/8 fotos e 8/8
+  blocos**.
 
 ## Limitações honestas
 
 * **PDF escaneado não tem texto** — é imagem. A página vira slide
   normalmente, mas não há legenda automática pra extrair.
-* **Site exige internet** (o resto do app funciona offline) e é capturado
-  como um visitante anônimo: página atrás de login, muro de cookies ou
-  proteção antibot sai como o visitante veria — possivelmente o aviso, não o
-  imóvel.
+* **Site exige internet** — é a única parte do app que não funciona offline.
+* **A captura é a de um visitante anônimo**: sem login, sem cookie, sem
+  histórico, como uma aba anônima. Para o caso de uso principal (site do
+  próprio imóvel/lançamento) isso é irrelevante — o dono quer visita. Mas
+  página atrás de **login** ou com **proteção antibot** (Cloudflare) sai como
+  o estranho veria: a tela de entrar ou a verificação, não o imóvel. O muro
+  de cookies, que é o caso comum, já é tratado (ver acima).
+* **Carrossel mostra um slide só.** Galeria que troca foto por clique é
+  fotografada no slide em que estiver. Rolar não ajuda — teria que clicar nas
+  setas, o que não é feito.
 * **Rolagem infinita é cortada em 12.000px.** Sem teto, uma página que
   carrega conteúdo pra sempre consumiria memória proporcional à altura.
 * **Sem espera por animação de entrada.** São 1,2s de folga depois do

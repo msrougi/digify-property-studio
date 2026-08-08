@@ -85,6 +85,11 @@ export class ElectronWebPageCapturer implements WebPageCapturer {
       await this.loadWithTimeout(window, url);
       await delay(SETTLE_MS);
 
+      // Ordem importa: o aviso de cookie costuma travar a rolagem, então tem
+      // que sair antes de tentar rolar a página.
+      await this.dismissConsentBanners(window);
+      await this.triggerLazyLoading(window);
+
       const title = await this.readTitle(window);
       const fullHeight = await this.readHeight(window);
       const captureHeight = Math.min(fullHeight, MAX_CAPTURE_HEIGHT);
@@ -137,6 +142,140 @@ export class ElectronWebPageCapturer implements WebPageCapturer {
       }
     } finally {
       if (timer) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Fecha aviso de cookie/LGPD antes de fotografar.
+   *
+   * Praticamente todo site brasileiro abre com essa tarja. Sem fechá-la, o
+   * vídeo do corretor mostra "Aceitar cookies" cobrindo o imóvel — e, pior,
+   * muitos desses avisos travam a rolagem da página, o que impediria o
+   * carregamento das fotos logo abaixo.
+   *
+   * Duas passadas, da mais segura pra menos: primeiro botões de plataformas
+   * de consentimento conhecidas e botões cujo texto de aceite esteja dentro
+   * de um container que se identifica como cookie/consentimento; depois, o
+   * que sobrou de sobreposição cobrindo a tela é escondido.
+   *
+   * Clicar é melhor que só esconder porque muitos avisos deixam a página com
+   * `overflow: hidden` até alguém responder.
+   */
+  private async dismissConsentBanners(window: BrowserWindow): Promise<void> {
+    const script = `(() => {
+      let fechados = 0;
+
+      // 1. Plataformas de consentimento conhecidas — o seletor é exato, então
+      //    não há risco de clicar em outra coisa.
+      const conhecidos = [
+        '#onetrust-accept-btn-handler',
+        '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+        '#CybotCookiebotDialogBodyButtonAccept',
+        '.osano-cm-accept-all',
+        '[data-testid="cookie-policy-manage-dialog-accept-button"]',
+        '[aria-label="Aceitar cookies"]',
+        '#adopt-accept-all-button',
+        '.cc-btn.cc-allow',
+      ];
+      for (const seletor of conhecidos) {
+        const botao = document.querySelector(seletor);
+        if (botao) { botao.click(); fechados++; }
+      }
+
+      // 2. Botão de aceite DENTRO de algo que se declara cookie/consentimento.
+      //    A restrição ao container é o que impede clicar num "Aceitar" de
+      //    proposta, contrato ou formulário no meio do anúncio.
+      const aceite = /^(aceitar|aceito|aceitar todos|aceitar tudo|concordo|entendi|ok, entendi|permitir todos|prosseguir)$/i;
+      const parecerConsentimento = (el) => {
+        const marca = ((el.id || '') + ' ' + (el.className || '')).toString().toLowerCase();
+        return /cookie|consent|lgpd|privac|gdpr/.test(marca);
+      };
+      for (const container of document.querySelectorAll('div,section,aside,dialog')) {
+        if (!parecerConsentimento(container)) continue;
+        for (const botao of container.querySelectorAll('button,a[role="button"],input[type="button"],input[type="submit"]')) {
+          const texto = (botao.innerText || botao.value || '').trim();
+          if (aceite.test(texto)) { botao.click(); fechados++; break; }
+        }
+      }
+
+      return fechados;
+    })()`;
+
+    try {
+      await window.webContents.executeJavaScript(script);
+      // O aviso sai com animação; fotografar no meio dela pegaria meio banner.
+      await delay(500);
+      await this.hideBlockingOverlays(window);
+    } catch {
+      // Página que proíbe execução de script ainda pode ser fotografada como
+      // está — melhor um vídeo com tarja que nenhum vídeo.
+    }
+  }
+
+  /**
+   * Esconde o que sobrou cobrindo a tela e devolve a rolagem à página.
+   *
+   * Deliberadamente conservador: só encosta em elemento *fixo* que cobre mais
+   * de metade da tela e está numa camada alta. Um cabeçalho fino com o preço
+   * do imóvel também é fixo — e não pode sumir.
+   */
+  private async hideBlockingOverlays(window: BrowserWindow): Promise<void> {
+    const script = `(() => {
+      let escondidos = 0;
+      const areaTela = window.innerWidth * window.innerHeight;
+      for (const el of document.querySelectorAll('body *')) {
+        const estilo = getComputedStyle(el);
+        if (estilo.position !== 'fixed' && estilo.position !== 'sticky') continue;
+        if (estilo.display === 'none' || estilo.visibility === 'hidden') continue;
+        const caixa = el.getBoundingClientRect();
+        const cobertura = (caixa.width * caixa.height) / areaTela;
+        const camada = parseInt(estilo.zIndex, 10) || 0;
+        if (cobertura > 0.5 && camada > 100) { el.style.setProperty('display', 'none', 'important'); escondidos++; }
+      }
+      // Aviso de cookie costuma travar a rolagem até alguém responder.
+      for (const el of [document.body, document.documentElement]) {
+        el.style.setProperty('overflow', 'visible', 'important');
+        el.style.setProperty('position', 'static', 'important');
+      }
+      return escondidos;
+    })()`;
+    try {
+      await window.webContents.executeJavaScript(script);
+    } catch {
+      // idem: sem script, fotografa como está.
+    }
+  }
+
+  /**
+   * Rola a página inteira pra disparar o carregamento preguiçoso das fotos.
+   *
+   * **Isto não é polimento.** Medido numa reprodução do comportamento real de
+   * portal de imóveis: sem rolar, só 3 de 10 fotos tinham carregado. O vídeo
+   * sairia com retângulos cinza no lugar das fotos do imóvel — que é
+   * exatamente o que se quer mostrar.
+   *
+   * No fim volta ao topo: a captura precisa começar do começo da página.
+   */
+  private async triggerLazyLoading(window: BrowserWindow): Promise<void> {
+    const script = `(async () => {
+      const passo = window.innerHeight;
+      let anterior = -1;
+      // Recalcula a altura a cada volta: página que carrega ao rolar cresce
+      // enquanto se rola.
+      for (let y = 0; y < document.body.scrollHeight && y !== anterior; y += passo) {
+        anterior = y;
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      // Folga no rodapé pra as últimas imagens terminarem.
+      await new Promise((r) => setTimeout(r, 400));
+      window.scrollTo(0, 0);
+      await new Promise((r) => setTimeout(r, 200));
+    })()`;
+    try {
+      await window.webContents.executeJavaScript(script);
+    } catch {
+      // Sem rolagem a captura ainda sai — só com menos fotos carregadas.
     }
   }
 
