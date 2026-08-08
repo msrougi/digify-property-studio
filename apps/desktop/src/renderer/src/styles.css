@@ -680,3 +680,25 @@ body {
   opacity: 0.35;
   cursor: default;
 }
+
+/*
+ * Campo de link do imóvel. `flex-basis: 100%` porque o container das opções é
+ * um flex-wrap: o campo precisa de largura pra caber uma URL inteira, e
+ * disputando a linha com os botões ficaria espremido.
+ */
+.slideshow__url {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+}
+
+.slideshow__url-input {
+  flex: 1;
+  cursor: text;
+  font-family: inherit;
+}
+
+.slideshow__url-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}

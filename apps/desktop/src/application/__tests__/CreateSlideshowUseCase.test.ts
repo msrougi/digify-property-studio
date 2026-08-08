@@ -61,7 +61,7 @@ describe("CreateSlideshowUseCase", () => {
         join(dir, "trabalho"),
       ).execute(
         {
-          filePaths: [pdf, foto1, foto2],
+          sources: [pdf, foto1, foto2],
           outputPath,
           format: "feed",
           slideDurationSec: 2.5,
@@ -94,7 +94,7 @@ describe("CreateSlideshowUseCase", () => {
 
       const outputPath = join(dir, "story.mp4");
       await new CreateSlideshowUseCase(new SlideshowRenderer(), join(dir, "trabalho")).execute({
-        filePaths: [foto],
+        sources: [foto],
         outputPath,
         format: "story",
         slideDurationSec: 2,
@@ -118,13 +118,13 @@ describe("CreateSlideshowUseCase", () => {
       const semLegenda = join(dir, "sem.mp4");
 
       await new CreateSlideshowUseCase(renderer, join(dir, "t1")).execute({
-        filePaths: [pdf],
+        sources: [pdf],
         outputPath: comLegenda,
         slideDurationSec: 2,
         usePdfTextAsCaption: true,
       });
       await new CreateSlideshowUseCase(renderer, join(dir, "t2")).execute({
-        filePaths: [pdf],
+        sources: [pdf],
         outputPath: semLegenda,
         slideDurationSec: 2,
       });
@@ -159,7 +159,7 @@ describe("CreateSlideshowUseCase", () => {
 
     await expect(
       new CreateSlideshowUseCase(new SlideshowRenderer(), join(dir, "t")).execute({
-        filePaths: [arquivo],
+        sources: [arquivo],
         outputPath: join(dir, "saida.mp4"),
       }),
     ).rejects.toThrow(/não suportado/i);
@@ -169,9 +169,64 @@ describe("CreateSlideshowUseCase", () => {
     const dir = mkdtempSync(join(tmpdir(), "digify-slides-empty-"));
     await expect(
       new CreateSlideshowUseCase(new SlideshowRenderer(), join(dir, "t")).execute({
-        filePaths: [],
+        sources: [],
         outputPath: join(dir, "saida.mp4"),
       }),
-    ).rejects.toThrow(/ao menos uma foto ou PDF/i);
+    ).rejects.toThrow(/ao menos uma foto, PDF ou site/i);
+  });
+
+  it(
+    "aceita site na mesma lista das fotos, respeitando a ordem",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "digify-slides-web-"));
+      const foto = join(dir, "sala.png");
+      await makePhoto(foto, "red");
+
+      // Dublê da captura: o navegador real é exercitado no teste em Electron
+      // (`ElectronWebPageCapturer`). Aqui o que está sob teste é a
+      // ORQUESTRAÇÃO — endereço tratado como fonte, ordem, contagem.
+      const capturadas: string[] = [];
+      const capturer = {
+        capture: async (url: string, outputDir: string) => {
+          capturadas.push(url);
+          const fatias = [join(outputDir, "f1.png"), join(outputDir, "f2.png")];
+          for (const [i, caminho] of fatias.entries()) {
+            await makePhoto(caminho, i === 0 ? "blue" : "green");
+          }
+          return { imagePaths: fatias, title: "Cobertura no Itaim - R$ 2.400.000", fullHeight: 4200 };
+        },
+      };
+
+      const resultado = await new CreateSlideshowUseCase(
+        new SlideshowRenderer(),
+        join(dir, "trabalho"),
+        capturer,
+      ).execute({
+        sources: ["https://exemplo.com.br/imovel/123", foto],
+        outputPath: join(dir, "video.mp4"),
+        slideDurationSec: 2,
+      });
+
+      expect(capturadas).toEqual(["https://exemplo.com.br/imovel/123"]);
+      // 2 fatias do site + 1 foto.
+      expect(resultado.slideCount).toBe(3);
+      expect(resultado.webSliceCount).toBe(2);
+      expect(resultado.pdfPageCount).toBe(0);
+
+      const meta = await readVideoMetadata(join(dir, "video.mp4"));
+      expect(meta.width).toBe(1920);
+    },
+    180_000,
+  );
+
+  it("avisa em vez de falhar feio quando não há como capturar site", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-slides-nocap-"));
+    await expect(
+      // Sem capturer injetado — é o que acontece fora do processo main.
+      new CreateSlideshowUseCase(new SlideshowRenderer(), join(dir, "t")).execute({
+        sources: ["https://exemplo.com.br"],
+        outputPath: join(dir, "saida.mp4"),
+      }),
+    ).rejects.toThrow(/não é possível capturar sites/i);
   });
 });

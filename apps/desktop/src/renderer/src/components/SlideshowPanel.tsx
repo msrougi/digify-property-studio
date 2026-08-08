@@ -12,6 +12,21 @@ function isPdf(path: string): boolean {
   return path.toLowerCase().endsWith(".pdf");
 }
 
+function isSite(valor: string): boolean {
+  return /^https?:\/\//i.test(valor.trim());
+}
+
+/** Rótulo curto da fonte, pra caber na linha da lista. */
+function rotulo(valor: string): string {
+  if (!isSite(valor)) return baseName(valor);
+  try {
+    const url = new URL(valor);
+    return url.hostname + (url.pathname === "/" ? "" : url.pathname);
+  } catch {
+    return valor;
+  }
+}
+
 const DURACOES = [2.5, 3.5, 5] as const;
 
 /**
@@ -29,6 +44,7 @@ export function SlideshowPanel(): JSX.Element {
   const [formato, setFormato] = useState<"feed" | "story" | "square">("feed");
   const [duracao, setDuracao] = useState<number>(3.5);
   const [usarTextoPdf, setUsarTextoPdf] = useState(true);
+  const [urlSite, setUrlSite] = useState("");
   const [status, setStatus] = useState<"idle" | "criando" | "pronto" | "erro">("idle");
   const [erro, setErro] = useState<string | null>(null);
   const [progresso, setProgresso] = useState<StageProgressDTO | null>(null);
@@ -41,6 +57,8 @@ export function SlideshowPanel(): JSX.Element {
   }, []);
 
   const temPdf = arquivos.some(isPdf);
+  const temSite = arquivos.some(isSite);
+  const urlValida = isSite(urlSite);
 
   async function adicionarArquivos(): Promise<void> {
     const escolhidos = await window.digify.selectSlideshowFiles();
@@ -48,6 +66,14 @@ export function SlideshowPanel(): JSX.Element {
     // Concatena em vez de substituir: o usuário costuma escolher as fotos de
     // um cômodo por vez.
     setArquivos((atuais) => [...atuais, ...escolhidos]);
+    setStatus("idle");
+    setResultado(null);
+  }
+
+  function adicionarSite(): void {
+    if (!urlValida) return;
+    setArquivos((atuais) => [...atuais, urlSite.trim()]);
+    setUrlSite("");
     setStatus("idle");
     setResultado(null);
   }
@@ -75,7 +101,7 @@ export function SlideshowPanel(): JSX.Element {
     try {
       const criado = await window.digify.createSlideshow(
         {
-          filePaths: arquivos,
+          sources: arquivos,
           format: formato,
           slideDurationSec: duracao,
           usePdfTextAsCaption: usarTextoPdf,
@@ -100,7 +126,7 @@ export function SlideshowPanel(): JSX.Element {
 
   return (
     <section>
-      <h2 className="section-title">Criar vídeo a partir de fotos e PDF</h2>
+      <h2 className="section-title">Criar vídeo a partir de fotos, PDF e site</h2>
 
       <div className="slideshow">
         <div className="render-panel__controls">
@@ -142,7 +168,7 @@ export function SlideshowPanel(): JSX.Element {
             {audio ? `♪ ${baseName(audio)}` : "Adicionar música"}
           </button>
 
-          {temPdf ? (
+          {temPdf || temSite ? (
             <label className="render-panel__checkbox">
               <input
                 type="checkbox"
@@ -150,7 +176,7 @@ export function SlideshowPanel(): JSX.Element {
                 onChange={(event) => setUsarTextoPdf(event.target.checked)}
                 disabled={status === "criando"}
               />
-              Usar o texto do PDF como legenda
+              Usar o texto do PDF/site como legenda
             </label>
           ) : null}
 
@@ -161,19 +187,43 @@ export function SlideshowPanel(): JSX.Element {
           >
             {status === "criando" ? "Montando…" : "Montar vídeo"}
           </button>
+
+          <div className="slideshow__url">
+            <input
+              className="select slideshow__url-input"
+              type="url"
+              placeholder="Cole o link da página do imóvel (https://…)"
+              value={urlSite}
+              onChange={(event) => setUrlSite(event.target.value)}
+              // Enter é o gesto natural depois de colar um link.
+              onKeyDown={(event) => {
+                if (event.key === "Enter") adicionarSite();
+              }}
+              disabled={status === "criando"}
+            />
+            <button
+              className="select"
+              onClick={adicionarSite}
+              disabled={!urlValida || status === "criando"}
+            >
+              Adicionar site
+            </button>
+          </div>
         </div>
 
         {arquivos.length === 0 ? (
           <p className="empty-state">
-            Adicione as fotos do imóvel e, se quiser, o PDF do anúncio. A ordem da lista é a
-            ordem do vídeo.
+            Adicione as fotos do imóvel e, se quiser, o PDF do anúncio ou o link da página
+            do imóvel. A ordem da lista é a ordem do vídeo.
           </p>
         ) : (
           <ol className="slideshow__lista">
             {arquivos.map((caminho, indice) => (
               <li key={`${caminho}-${indice}`} className="slideshow__item">
-                <span className="slideshow__tipo">{isPdf(caminho) ? "PDF" : "FOTO"}</span>
-                <span className="slideshow__nome">{baseName(caminho)}</span>
+                <span className="slideshow__tipo">
+                  {isSite(caminho) ? "SITE" : isPdf(caminho) ? "PDF" : "FOTO"}
+                </span>
+                <span className="slideshow__nome">{rotulo(caminho)}</span>
                 <span className="slideshow__acoes">
                   <button
                     onClick={() => mover(indice, -1)}

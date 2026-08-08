@@ -77,11 +77,13 @@ export interface SlideshowFormatDTO {
 }
 
 export interface CreateSlideshowOptions {
-  filePaths: string[];
+  /** Caminhos de foto/PDF e endereços de site, misturados na ordem do vídeo. */
+  sources: string[];
   format?: "feed" | "story" | "square";
   slideDurationSec?: number;
   usePdfTextAsCaption?: boolean;
   audioPath?: string;
+  maxWebSlices?: number;
 }
 
 export interface SlideshowDTO {
@@ -89,6 +91,7 @@ export interface SlideshowDTO {
   durationSec: number;
   slideCount: number;
   pdfPageCount: number;
+  webSliceCount: number;
 }
 
 export interface ExportPresetDTO {

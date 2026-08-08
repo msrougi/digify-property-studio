@@ -71,11 +71,12 @@ interface SlideshowFormatDTO {
 }
 
 interface CreateSlideshowOptions {
-  filePaths: string[];
+  sources: string[];
   format?: "feed" | "story" | "square";
   slideDurationSec?: number;
   usePdfTextAsCaption?: boolean;
   audioPath?: string;
+  maxWebSlices?: number;
 }
 
 interface SlideshowDTO {
@@ -83,6 +84,7 @@ interface SlideshowDTO {
   durationSec: number;
   slideCount: number;
   pdfPageCount: number;
+  webSliceCount: number;
 }
 
 interface ExportPresetDTO {

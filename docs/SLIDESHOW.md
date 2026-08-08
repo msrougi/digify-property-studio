@@ -1,7 +1,8 @@
-# Criar vídeo a partir de fotos e PDF
+# Criar vídeo a partir de fotos, PDF e site
 
-**Status: shipped.** Fotos e/ou anúncios em PDF entram, um vídeo pronto pra
-publicar sai — com movimento de câmera simulado, transições e legenda.
+**Status: shipped.** Fotos, anúncios em PDF e a própria página do imóvel
+entram; um vídeo pronto pra publicar sai — com movimento de câmera simulado,
+transições e legenda.
 
 ## Por que este caminho é diferente de tudo que veio antes
 
@@ -27,9 +28,12 @@ Consequências práticas:
 |---------|----------------|
 | Fotos (JPG, PNG, WEBP, BMP, TIFF, HEIC) | Um slide cada |
 | PDF | **Uma página = um slide**, rasterizada na altura da saída |
+| Site (http/https) | Página capturada e **fatiada** na proporção do vídeo |
 | Áudio (MP3, M4A, AAC, WAV, OGG) | Trilha de fundo, com fade de saída |
 
-A ordem da lista na tela é a ordem do vídeo, e é reordenável.
+Tudo numa lista só, porque pro usuário é uma sequência só: a foto da sala, a
+página do anúncio e o PDF convivem e são reordenáveis do mesmo jeito.
+
 
 ## PDF é material de primeira classe, não anexo
 
@@ -52,6 +56,55 @@ quartos, preço) que vira legenda **sem ninguém redigitar nada**. Ele é
 truncado em 90 caracteres na fronteira de palavra — parágrafo inteiro
 viraria parede de texto sobre a foto, e cortar no meio de um número é pior
 que cortar a frase.
+
+## Site: capturado pelo Chromium que já vem no Electron
+
+`ElectronWebPageCapturer` carrega a URL numa janela invisível e fotografa a
+página. Nenhuma dependência nova — o navegador já está no app.
+
+### Isolamento
+
+A URL é digitada pelo usuário, então é **conteúdo não confiável rodando
+dentro do app**. A janela usa `sandbox`, sem integração com Node, sem preload,
+com `webSecurity`, e `setWindowOpenHandler` nega qualquer popup.
+
+Só `http`/`https` passam (`isSupportedWebUrl`). Não é formalidade:
+`file://` daria à página acesso de leitura ao disco do usuário e
+`javascript:` executaria código. Como o endereço vem digitado, esse filtro é
+a fronteira de confiança — e tem teste dedicado pra cada esquema recusado.
+
+Verificado no Electron real: a página capturada não enxerga `require`,
+`process` nem `window.digify`.
+
+### Por que fatiar em vez de espremer
+
+Um anúncio tem ~5.000px de altura. Espremer isso num quadro 16:9 deixa o
+texto ilegível, o que anula o motivo de pôr o site no vídeo. A captura
+inteira é cortada em fatias **na proporção do vídeo**, na ordem de leitura,
+com 6% de sobreposição pra não partir frase ao meio. Teto de 3 fatias por
+site: página longa não pode virar um vídeo de 20 slides.
+
+A janela virtual tem 1280px de largura de propósito — é largura de desktop,
+então o site entrega o layout "de computador". Em 400px viria o layout de
+celular, estreito e com tudo empilhado.
+
+### Título vira legenda
+
+Prioridade: `og:title` → `<title>` → primeiro `<h1>`. Só a **primeira** fatia
+leva a legenda; repeti-la em todas viraria uma tarja fixa por vários
+segundos.
+
+### O bug que só a execução real pegou
+
+A primeira versão chamava `session.clearStorageData()` no `finally`, por
+higiene. Rodando no Electron de verdade: **essa promessa nunca resolve** numa
+sessão em memória — nem cumpre, nem rejeita. Dentro de um `finally` com
+`await`, toda captura de site congelaria o app para sempre. Um `.catch()` não
+salvaria, porque a promessa simplesmente não assenta.
+
+A correção foi remover, não contornar: a partição **não** leva o prefixo
+`persist:`, então o Electron já mantém tudo em memória e não existe storage
+em disco pra limpar. A chamada era, ao mesmo tempo, fatal e desnecessária.
 
 ## Legenda: por que ASS/libass e não `drawtext`
 
@@ -121,16 +174,33 @@ menos):
   formato vertical respeitado; legenda do PDF só aparece quando pedida
   (medido comparando pixels escuros na faixa inferior); recusa tipo não
   suportado e lista vazia.
+* `WebPageCapturer.test.ts` — aceita http/https; recusa `file://`,
+  `javascript:`, `data:`, caminho de arquivo e texto solto.
+* `CreateSlideshowUseCase.test.ts` (site) — endereço tratado como fonte na
+  mesma lista das fotos, ordem preservada, contagem de fatias correta, e
+  erro claro quando não há capturador disponível.
 * **Electron real** (`xvfb-run electron`): `@napi-rs/canvas` (nativo) e
   `pdfjs-dist` (ESM) carregam no processo main, o PDF rasteriza
   (763x1080, texto correto) e o vídeo é montado. Isto importa porque o
   `import()` dinâmico de ESM dentro do bundle do Electron é exatamente o
   tipo de coisa que passa no teste unitário e quebra no app empacotado.
+* **Electron real (site)**: servidor HTTP local de 4.920px de altura —
+  `og:title` tem prioridade sobre `<title>`, a captura sai 1280x4920, vira
+  3 fatias 16:9, o vídeo é montado, a janela é destruída sem travar, e a
+  página não enxerga `require`/`process`/`window.digify`.
 
 ## Limitações honestas
 
 * **PDF escaneado não tem texto** — é imagem. A página vira slide
   normalmente, mas não há legenda automática pra extrair.
+* **Site exige internet** (o resto do app funciona offline) e é capturado
+  como um visitante anônimo: página atrás de login, muro de cookies ou
+  proteção antibot sai como o visitante veria — possivelmente o aviso, não o
+  imóvel.
+* **Rolagem infinita é cortada em 12.000px.** Sem teto, uma página que
+  carrega conteúdo pra sempre consumiria memória proporcional à altura.
+* **Sem espera por animação de entrada.** São 1,2s de folga depois do
+  carregamento; site com muita animação pode ser fotografado no meio dela.
 * **Sem detecção de rosto ou de assunto**: o Ken Burns sempre parte do
   centro. Uma foto com o assunto muito na borda pode ter enquadramento
   infeliz.

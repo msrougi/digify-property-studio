@@ -37,6 +37,7 @@ import { RenderingEngine } from "./render/RenderingEngine.js";
 import { DiskRenderedFileCleaner } from "./render/DiskRenderedFileCleaner.js";
 import { FrameByFrameCleaner } from "./render/FrameByFrameCleaner.js";
 import { SlideshowRenderer } from "./render/SlideshowRenderer.js";
+import { ElectronWebPageCapturer } from "./web/ElectronWebPageCapturer.js";
 
 /**
  * Composition root — o único lugar que instancia infraestrutura concreta e a
@@ -132,7 +133,11 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
     ),
     // Criação de vídeo a partir de fotos/PDF. Fica junto dos renders porque o
     // resultado é efêmero igual: `clearSessionData` leva os dois embora.
-    createSlideshow: new CreateSlideshowUseCase(new SlideshowRenderer(), slideshowDir),
+    createSlideshow: new CreateSlideshowUseCase(
+      new SlideshowRenderer(),
+      slideshowDir,
+      new ElectronWebPageCapturer(),
+    ),
     slideshowDir,
     exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,
