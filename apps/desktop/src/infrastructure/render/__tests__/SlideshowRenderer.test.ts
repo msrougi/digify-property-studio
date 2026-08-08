@@ -129,6 +129,88 @@ describe("SlideshowRenderer", () => {
     120_000,
   );
 
+  it(
+    "música mais curta que o vídeo NÃO encurta o vídeo — ela se repete",
+    async () => {
+      // Bug real medido: `-shortest` com faixa curta cortava o VÍDEO no
+      // tamanho da música (10,8s viravam 4s). O usuário perderia dois terços
+      // do trabalho sem entender por quê.
+      const dir = mkdtempSync(join(tmpdir(), "digify-slideshow-audio-curto-"));
+      const fotos = ["red", "green", "blue"].map((cor) => join(dir, `${cor}.png`));
+      await Promise.all(
+        fotos.map((path, i) => makePhoto(path, ["red", "green", "blue"][i] as string)),
+      );
+
+      const musica = join(dir, "curta.mp3");
+      await execFileAsync(FFMPEG_PATH, [
+        "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:a", "libmp3lame", musica,
+      ]);
+
+      const outputPath = join(dir, "video.mp4");
+      const { durationSec } = await new SlideshowRenderer().render({
+        slides: fotos.map((imagePath) => ({ imagePath, durationSec: 4 })),
+        outputPath,
+        workDir: dir,
+        width: 1280,
+        height: 720,
+        fps: 25,
+        transitionSec: 0.6,
+        audioPath: musica,
+      });
+
+      expect(durationSec).toBeCloseTo(10.8, 1);
+      const meta = await readVideoMetadata(outputPath);
+      // O vídeo tem que manter a própria duração, não a da música.
+      expect(meta.durationMs).toBeGreaterThan(10_000);
+      expect(meta.hasAudio).toBe(true);
+    },
+    180_000,
+  );
+
+  it(
+    "a música toca de verdade e some no fim (fade), em vez de cortar seca",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "digify-slideshow-audio-fade-"));
+      const foto = join(dir, "foto.png");
+      await makePhoto(foto, "gray");
+
+      const musica = join(dir, "trilha.mp3");
+      await execFileAsync(FFMPEG_PATH, [
+        "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=30", "-c:a", "libmp3lame", musica,
+      ]);
+
+      const outputPath = join(dir, "com-som.mp4");
+      await new SlideshowRenderer().render({
+        slides: [{ imagePath: foto, durationSec: 8 }],
+        outputPath,
+        workDir: dir,
+        width: 640,
+        height: 360,
+        fps: 25,
+        audioPath: musica,
+      });
+
+      // Volume real medido pelo FFmpeg em duas janelas: o miolo tem som, e o
+      // último segundo (dentro do fade de saída) tem bem menos.
+      const volume = async (de: number, ate: number): Promise<number> => {
+        const { stderr } = await execFileAsync(FFMPEG_PATH, [
+          "-ss", String(de), "-to", String(ate), "-i", outputPath,
+          "-af", "volumedetect", "-f", "null", "-",
+        ]);
+        const match = /mean_volume:\s*(-?[\d.]+) dB/.exec(stderr);
+        return match ? Number(match[1]) : -Infinity;
+      };
+
+      const miolo = await volume(3, 5);
+      const fim = await volume(7.5, 8);
+
+      // -91 dB é o "silêncio" que o FFmpeg reporta quando não há sinal.
+      expect(miolo).toBeGreaterThan(-40);
+      expect(fim).toBeLessThan(miolo - 5);
+    },
+    180_000,
+  );
+
   it("recusa montar vídeo sem imagem nenhuma em vez de gerar um arquivo vazio", async () => {
     await expect(
       new SlideshowRenderer().render({

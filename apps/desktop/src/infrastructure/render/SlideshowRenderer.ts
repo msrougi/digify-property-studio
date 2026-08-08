@@ -34,6 +34,10 @@ const DEFAULT_FPS = 30;
 const DEFAULT_TRANSITION_SEC = 0.6;
 const MIN_SLIDE_SEC = 1;
 
+/** Suaviza a entrada e a saída da música — corte seco soa amador. */
+const AUDIO_FADE_IN_SEC = 1;
+const AUDIO_FADE_OUT_SEC = 2;
+
 /**
  * Fator de ampliação antes do `zoompan`.
  *
@@ -116,14 +120,25 @@ export class SlideshowRenderer {
 
     const args = [
       ...inputs,
-      ...(request.audioPath ? ["-i", request.audioPath] : []),
+      // `-stream_loop -1` repete a música quantas vezes precisar. Sem isso, a
+      // combinação `-shortest` + faixa curta cortava o VÍDEO no tamanho da
+      // música: medido, um vídeo de 10,8s virava 4s com uma faixa de 4s. O
+      // usuário perderia dois terços do trabalho sem entender por quê.
+      // O `-t` na saída é quem define a duração final; a música sobrando é
+      // descartada.
+      ...(request.audioPath ? ["-stream_loop", "-1", "-i", request.audioPath] : []),
       "-filter_complex", filters.join(";"),
       "-map", `[${outputLabel}]`,
       ...(request.audioPath
-        ? // `-shortest` sozinho não basta: a música costuma ser mais longa que
-          // o vídeo, e sem o fade ela corta seca no fim.
-          ["-map", `${slides.length}:a`, "-c:a", "aac", "-b:a", "192k", "-shortest",
-           "-af", `afade=t=out:st=${Math.max(0, totalDurationSec - 2).toFixed(3)}:d=2`]
+        ? [
+            "-map", `${slides.length}:a`,
+            "-c:a", "aac", "-b:a", "192k",
+            // Entra e sai suave: música que começa e corta a plena carga soa
+            // amadora, que é o oposto do objetivo.
+            "-af",
+            `afade=t=in:st=0:d=${AUDIO_FADE_IN_SEC},` +
+              `afade=t=out:st=${Math.max(0, totalDurationSec - AUDIO_FADE_OUT_SEC).toFixed(3)}:d=${AUDIO_FADE_OUT_SEC}`,
+          ]
         : []),
       "-c:v", "libx264", "-crf", "18", "-preset", "medium",
       "-pix_fmt", "yuv420p",

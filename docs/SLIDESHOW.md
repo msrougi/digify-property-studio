@@ -153,6 +153,27 @@ story. `buildAssSubtitles.ts` também escapa `{`, `}` e `\` — no ASS essas
 chaves delimitam tags de override, então um preço escrito `{R$ 500}`
 **sumiria da tela sem erro nenhum**.
 
+## Som
+
+A trilha entra com fade de 1s e sai com fade de 2s — música que começa e
+corta a plena carga soa amadora, que é o oposto do objetivo.
+
+### O bug que quase custou o vídeo do usuário
+
+A primeira versão usava `-shortest` junto com a faixa de áudio. Medido: um
+vídeo de 10,8s com uma música de 4s saía com **4 segundos**. O `-shortest`
+corta pelo fluxo mais curto — e o mais curto era a música. O corretor
+perderia dois terços do trabalho sem nenhuma mensagem de erro.
+
+A correção é `-stream_loop -1` no áudio: a música se repete quantas vezes
+precisar, e quem manda na duração final é o `-t` da saída. Faixa mais longa
+que o vídeo continua sendo cortada normalmente.
+
+Coberto por dois testes que medem o som de verdade, não só a presença da
+faixa: um verifica que faixa curta não encurta o vídeo; o outro mede o
+**volume real** (`volumedetect`) em duas janelas, confirmando que o miolo tem
+som e que o último segundo, dentro do fade, tem pelo menos 5 dB a menos.
+
 ## Ken Burns sem tremor
 
 O `zoompan` do FFmpeg calcula o recorte em passos inteiros de pixel. Numa
