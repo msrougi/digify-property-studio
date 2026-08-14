@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import { FFMPEG_PATH } from "../../ffmpeg/paths.js";
 import { readVideoMetadata } from "../../ffmpeg/ffprobeMetadata.js";
 import { extractGrayscaleFrame } from "../../ffmpeg/extractGrayscaleFrame.js";
+import { extractRgbFrame } from "../../ffmpeg/extractRgbFrame.js";
+import { composeLogoCard } from "../composeLogoCard.js";
 import { SlideshowRenderer } from "../SlideshowRenderer.js";
 
 const execFileAsync = promisify(execFile);
@@ -207,6 +209,115 @@ describe("SlideshowRenderer", () => {
       // -91 dB é o "silêncio" que o FFmpeg reporta quando não há sinal.
       expect(miolo).toBeGreaterThan(-40);
       expect(fim).toBeLessThan(miolo - 5);
+    },
+    180_000,
+  );
+
+  it(
+    "aplica a marca d'água só no canto inferior direito, sem vazar pro resto do quadro",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "digify-slideshow-marca-"));
+      // Logo amarelo sobre fundo transparente; foto azul escura sem amarelo
+      // nenhum. Assim qualquer pixel amarelo no resultado veio da marca.
+      const logo = join(dir, "logo.png");
+      await execFileAsync(FFMPEG_PATH, [
+        "-y",
+        "-f", "lavfi", "-i", "color=c=black@0:size=400x400,format=rgba",
+        "-f", "lavfi", "-i", "color=c=yellow:size=300x160",
+        "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2:format=auto",
+        "-frames:v", "1", logo,
+      ]);
+      const foto = join(dir, "foto.png");
+      await makePhoto(foto, "0x102040");
+
+      const renderer = new SlideshowRenderer();
+      const base = { workDir: dir, width: 1280, height: 720, fps: 25 } as const;
+      const sem = join(dir, "sem.mp4");
+      const com = join(dir, "com.mp4");
+      await renderer.render({ ...base, slides: [{ imagePath: foto, durationSec: 3 }], outputPath: sem });
+      await renderer.render({
+        ...base,
+        slides: [{ imagePath: foto, durationSec: 3 }],
+        outputPath: com,
+        watermarkPath: logo,
+      });
+
+      const amarelos = async (video: string): Promise<{ canto: number; resto: number }> => {
+        const frame = await extractRgbFrame(video, 1500, 1280, 720, 1280);
+        let canto = 0;
+        let resto = 0;
+        for (let y = 0; y < frame.height; y++) {
+          for (let x = 0; x < frame.width; x++) {
+            const i = (y * frame.width + x) * 3;
+            const [r, g, b] = [frame.buffer[i] as number, frame.buffer[i + 1] as number, frame.buffer[i + 2] as number];
+            if (r > 150 && g > 150 && b < 110) {
+              if (x > frame.width * 0.7 && y > frame.height * 0.65) canto++;
+              else resto++;
+            }
+          }
+        }
+        return { canto, resto };
+      };
+
+      expect(await amarelos(sem)).toEqual({ canto: 0, resto: 0 });
+      const comMarca = await amarelos(com);
+      expect(comMarca.canto).toBeGreaterThan(1000);
+      // Zero fora do canto: a marca não pode aparecer no meio do imóvel.
+      expect(comMarca.resto).toBe(0);
+    },
+    180_000,
+  );
+
+  it(
+    "abre e encerra com a arte do logo, sem movimento de câmera",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "digify-slideshow-capa-"));
+      const logo = join(dir, "logo.png");
+      await execFileAsync(FFMPEG_PATH, [
+        "-y",
+        "-f", "lavfi", "-i", "color=c=black@0:size=400x400,format=rgba",
+        "-f", "lavfi", "-i", "color=c=yellow:size=300x160",
+        "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2:format=auto",
+        "-frames:v", "1", logo,
+      ]);
+      const foto = join(dir, "foto.png");
+      await makePhoto(foto, "0x102040");
+
+      const capa = join(dir, "capa.png");
+      await composeLogoCard(logo, capa, 1280, 720, "0x1A1A2E");
+
+      const outputPath = join(dir, "full.mp4");
+      await new SlideshowRenderer().render({
+        workDir: dir,
+        width: 1280,
+        height: 720,
+        fps: 25,
+        outputPath,
+        slides: [
+          { imagePath: capa, durationSec: 2, staticFrame: true },
+          { imagePath: foto, durationSec: 3 },
+          { imagePath: capa, durationSec: 2, staticFrame: true },
+        ],
+      });
+
+      const amareloCentral = async (ms: number): Promise<number> => {
+        const frame = await extractRgbFrame(outputPath, ms, 1280, 720, 1280);
+        let total = 0;
+        for (let y = 0; y < frame.height; y++) {
+          for (let x = 0; x < frame.width; x++) {
+            const i = (y * frame.width + x) * 3;
+            const [r, g, b] = [frame.buffer[i] as number, frame.buffer[i + 1] as number, frame.buffer[i + 2] as number];
+            // Só o miolo: o canto é território da marca d'água.
+            if (r > 150 && g > 150 && b < 110 && x < frame.width * 0.7) total++;
+          }
+        }
+        return total;
+      };
+
+      // Logo grande na abertura e no encerramento, nada no meio.
+      expect(await amareloCentral(700)).toBeGreaterThan(5000);
+      expect(await amareloCentral(3500)).toBe(0);
+      expect(await amareloCentral(5500)).toBeGreaterThan(5000);
     },
     180_000,
   );

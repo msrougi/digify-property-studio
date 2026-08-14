@@ -29,6 +29,12 @@ function rotulo(valor: string): string {
 
 const DURACOES = [2.5, 3.5, 5] as const;
 
+const MODOS_LOGO = [
+  { id: "both", rotulo: "Abertura, fim e canto" },
+  { id: "intro", rotulo: "Só abertura e fim" },
+  { id: "watermark", rotulo: "Só no canto" },
+] as const;
+
 /**
  * Monta um vídeo de anúncio a partir de fotos e PDFs.
  *
@@ -45,6 +51,8 @@ export function SlideshowPanel(): JSX.Element {
   const [duracao, setDuracao] = useState<number>(3.5);
   const [usarTextoPdf, setUsarTextoPdf] = useState(true);
   const [urlSite, setUrlSite] = useState("");
+  const [logo, setLogo] = useState<string | null>(null);
+  const [modoLogo, setModoLogo] = useState<"intro" | "watermark" | "both">("both");
   const [status, setStatus] = useState<"idle" | "criando" | "pronto" | "erro">("idle");
   const [erro, setErro] = useState<string | null>(null);
   const [progresso, setProgresso] = useState<StageProgressDTO | null>(null);
@@ -106,6 +114,7 @@ export function SlideshowPanel(): JSX.Element {
           slideDurationSec: duracao,
           usePdfTextAsCaption: usarTextoPdf,
           ...(audio ? { audioPath: audio } : {}),
+          ...(logo ? { logoPath: logo, logoMode: modoLogo } : {}),
         },
         setProgresso,
       );
@@ -167,6 +176,39 @@ export function SlideshowPanel(): JSX.Element {
           >
             {audio ? `♪ ${baseName(audio)}` : "Adicionar música"}
           </button>
+
+          <button
+            className="select"
+            onClick={async () => setLogo(await window.digify.selectSlideshowLogo())}
+            disabled={status === "criando"}
+          >
+            {logo ? `◆ ${baseName(logo)}` : "Adicionar logo"}
+          </button>
+
+          {logo ? (
+            <>
+              <select
+                className="select"
+                value={modoLogo}
+                onChange={(event) => setModoLogo(event.target.value as typeof modoLogo)}
+                disabled={status === "criando"}
+              >
+                {MODOS_LOGO.map((modo) => (
+                  <option key={modo.id} value={modo.id}>
+                    Logo: {modo.rotulo}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="select"
+                onClick={() => setLogo(null)}
+                disabled={status === "criando"}
+                title="Remover logo"
+              >
+                ✕
+              </button>
+            </>
+          ) : null}
 
           {temPdf || temSite ? (
             <label className="render-panel__checkbox">

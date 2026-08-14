@@ -77,6 +77,8 @@ interface CreateSlideshowOptions {
   usePdfTextAsCaption?: boolean;
   audioPath?: string;
   maxWebSlices?: number;
+  logoPath?: string;
+  logoMode?: "intro" | "watermark" | "both";
 }
 
 interface SlideshowDTO {
@@ -131,6 +133,7 @@ interface DigifyApi {
   getExportPresets(): Promise<ExportPresetDTO[]>;
   selectSlideshowFiles(): Promise<string[]>;
   selectSlideshowAudio(): Promise<string | null>;
+  selectSlideshowLogo(): Promise<string | null>;
   getSlideshowFormats(): Promise<SlideshowFormatDTO[]>;
   createSlideshow(
     options: CreateSlideshowOptions,

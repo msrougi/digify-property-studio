@@ -10,6 +10,12 @@ export interface Slide {
   durationSec: number;
   /** Legenda exibida enquanto este slide está no ar. Vazio = sem legenda. */
   caption?: string;
+  /**
+   * Sem movimento de câmera. Usado nas artes de abertura/encerramento: elas
+   * já vêm no tamanho exato da saída, e aproximar um logo o deixaria borrado
+   * e cortado nas bordas.
+   */
+  staticFrame?: boolean;
 }
 
 export interface SlideshowRequest {
@@ -23,6 +29,8 @@ export interface SlideshowRequest {
   transitionSec?: number;
   /** Faixa de áudio opcional. O vídeo é cortado no fim das imagens, nunca no fim da música. */
   audioPath?: string;
+  /** Logo aplicado no canto inferior direito durante o vídeo inteiro. */
+  watermarkPath?: string;
 }
 
 export interface SlideshowProgress {
@@ -51,6 +59,16 @@ const ZOOMPAN_SUPERSAMPLE = 2;
 
 /** Quanto a imagem chega a aproximar no fim do movimento. 1.12 = 12%. */
 const KEN_BURNS_ZOOM = 1.12;
+
+/** Largura da marca d'água, em fração da largura do vídeo. */
+const WATERMARK_WIDTH_RATIO = 0.14;
+/** Distância das bordas, em fração da largura — respeita a área segura das redes. */
+const WATERMARK_MARGIN_RATIO = 0.03;
+/**
+ * Opacidade da marca d'água. Menos que 1 porque ela acompanha o vídeo
+ * inteiro: a marca precisa ser lida sem competir com o imóvel.
+ */
+const WATERMARK_OPACITY = 0.85;
 
 /**
  * Monta um vídeo a partir de imagens paradas: movimento de câmera simulado
@@ -112,6 +130,24 @@ export class SlideshowRenderer {
       outputLabel = "legendado";
     }
 
+    // A marca d'água entra por ÚLTIMO, depois da legenda: ela representa a
+    // marca do corretor e não pode ficar atrás de texto nenhum.
+    if (request.watermarkPath) {
+      const logoWidth = Math.round(width * WATERMARK_WIDTH_RATIO);
+      const margin = Math.round(width * WATERMARK_MARGIN_RATIO);
+      // Índice da entrada do logo: depende de haver áudio ou não, porque é a
+      // ORDEM dos `-i` que define a numeração no grafo.
+      const logoInput = slides.length + (request.audioPath ? 1 : 0);
+      filters.push(
+        // `-1` na altura preserva a proporção — esticar a marca de um cliente
+        // seria pior que não ter marca.
+        `[${logoInput}:v]format=rgba,scale=${logoWidth}:-1,` +
+          `colorchannelmixer=aa=${WATERMARK_OPACITY}[marca]`,
+        `[${outputLabel}][marca]overlay=W-w-${margin}:H-h-${margin}:format=auto[marcado]`,
+      );
+      outputLabel = "marcado";
+    }
+
     const inputs = slides.flatMap((slide) => [
       "-loop", "1",
       "-t", slide.durationSec.toFixed(3),
@@ -127,6 +163,9 @@ export class SlideshowRenderer {
       // O `-t` na saída é quem define a duração final; a música sobrando é
       // descartada.
       ...(request.audioPath ? ["-stream_loop", "-1", "-i", request.audioPath] : []),
+      // Depois do áudio de propósito: a ordem das entradas define os índices
+      // usados no grafo acima (`logoInput`).
+      ...(request.watermarkPath ? ["-i", request.watermarkPath] : []),
       "-filter_complex", filters.join(";"),
       "-map", `[${outputLabel}]`,
       ...(request.audioPath
@@ -166,6 +205,16 @@ export class SlideshowRenderer {
 
     const parts = slides.map((slide, index) => {
       const frames = Math.max(1, Math.round(slide.durationSec * fps));
+
+      // Arte de abertura/encerramento: já vem no tamanho exato da saída, e
+      // aproximar um logo só o deixaria borrado e cortado nas bordas.
+      if (slide.staticFrame) {
+        return (
+          `[${index}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
+          `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${fps},format=yuv420p[v${index}]`
+        );
+      }
+
       // Alterna aproximar/afastar: uma sequência inteira zoomando pro mesmo
       // lado cansa e denuncia que foi automático.
       const zoomIn = index % 2 === 0;

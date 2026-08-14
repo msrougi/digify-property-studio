@@ -152,6 +152,60 @@ describe("CreateSlideshowUseCase", () => {
     180_000,
   );
 
+  it(
+    "logo: 'intro' acrescenta abertura e encerramento; 'watermark' não mexe na contagem",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "digify-slides-logo-"));
+      const foto = join(dir, "foto.png");
+      await makePhoto(foto, "0x102040");
+      const logo = join(dir, "logo.png");
+      await execFileAsync(FFMPEG_PATH, [
+        "-y",
+        "-f", "lavfi", "-i", "color=c=black@0:size=400x400,format=rgba",
+        "-f", "lavfi", "-i", "color=c=yellow:size=300x160",
+        "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2:format=auto",
+        "-frames:v", "1", logo,
+      ]);
+
+      const renderer = new SlideshowRenderer();
+      const montar = async (
+        logoMode: "intro" | "watermark" | "both",
+        nome: string,
+      ): Promise<number> => {
+        const resultado = await new CreateSlideshowUseCase(renderer, join(dir, nome)).execute({
+          sources: [foto],
+          outputPath: join(dir, `${nome}.mp4`),
+          slideDurationSec: 2,
+          logoPath: logo,
+          logoMode,
+        });
+        return resultado.slideCount;
+      };
+
+      // 1 foto + arte de abertura + arte de encerramento.
+      expect(await montar("intro", "a")).toBe(3);
+      expect(await montar("both", "b")).toBe(3);
+      // Marca d'água é sobreposição: não vira slide.
+      expect(await montar("watermark", "c")).toBe(1);
+    },
+    240_000,
+  );
+
+  it("avisa quando o logo apontado não existe, em vez de montar sem ele", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "digify-slides-logo-404-"));
+    const foto = join(dir, "foto.png");
+    await makePhoto(foto, "red");
+
+    await expect(
+      new CreateSlideshowUseCase(new SlideshowRenderer(), join(dir, "t")).execute({
+        sources: [foto],
+        outputPath: join(dir, "saida.mp4"),
+        logoPath: join(dir, "nao-existe.png"),
+        logoMode: "intro",
+      }),
+    ).rejects.toThrow(/logo não encontrado/i);
+  });
+
   it("recusa arquivo de tipo não suportado em vez de gerar vídeo quebrado", async () => {
     const dir = mkdtempSync(join(tmpdir(), "digify-slides-bad-"));
     const arquivo = join(dir, "planilha.xlsx");

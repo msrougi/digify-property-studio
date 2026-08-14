@@ -84,6 +84,8 @@ export interface CreateSlideshowOptions {
   usePdfTextAsCaption?: boolean;
   audioPath?: string;
   maxWebSlices?: number;
+  logoPath?: string;
+  logoMode?: "intro" | "watermark" | "both";
 }
 
 export interface SlideshowDTO {
@@ -261,6 +263,16 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
       ],
     });
     return result.canceled ? [] : result.filePaths;
+  });
+
+  handle("slideshow:selectLogo", async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog(window, {
+      properties: ["openFile"],
+      // PNG primeiro: é o formato que carrega transparência, e logo com fundo
+      // branco num vídeo escuro fica com uma caixa em volta.
+      filters: [{ name: "Logo", extensions: ["png", "jpg", "jpeg", "webp", "svg"] }],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   handle("slideshow:selectAudio", async (): Promise<string | null> => {

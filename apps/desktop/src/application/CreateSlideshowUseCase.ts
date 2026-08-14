@@ -1,6 +1,7 @@
 import { mkdirSync, existsSync } from "node:fs";
 import { extname, join } from "node:path";
 import { rasterizePdf } from "../infrastructure/pdf/rasterizePdf.js";
+import { composeLogoCard } from "../infrastructure/render/composeLogoCard.js";
 import { SlideshowRenderer, type Slide } from "../infrastructure/render/SlideshowRenderer.js";
 import type { OnStageProgress } from "./progress.js";
 import { isSupportedWebUrl, type WebPageCapturer } from "./WebPageCapturer.js";
@@ -33,7 +34,22 @@ export interface CreateSlideshowInput {
   usePdfTextAsCaption?: boolean;
   /** Quantas telas capturar de cada site. Página longa vira várias fatias. */
   maxWebSlices?: number;
+  /** Logo da marca (PNG com transparência dá o melhor resultado). */
+  logoPath?: string;
+  /** Onde o logo aparece. Sem `logoPath`, é ignorado. */
+  logoMode?: LogoMode;
+  /** Cor de fundo da arte de abertura/encerramento. */
+  logoBackgroundColor?: string;
 }
+
+/**
+ * Onde a marca aparece no vídeo.
+ *
+ * - `intro`: arte de abertura e encerramento, logo grande e centralizado.
+ * - `watermark`: logo discreto no canto inferior direito, o vídeo inteiro.
+ * - `both`: os dois.
+ */
+export type LogoMode = "intro" | "watermark" | "both";
 
 export interface CreateSlideshowResult {
   outputPath: string;
@@ -44,6 +60,11 @@ export interface CreateSlideshowResult {
   /** Quantos slides vieram de captura de site. */
   webSliceCount: number;
 }
+
+/** Segundos de cada arte de abertura/encerramento. */
+const LOGO_CARD_SEC = 2.5;
+/** Fundo padrão da arte: escuro e neutro, deixa qualquer logo respirar. */
+const DEFAULT_LOGO_BACKGROUND = "0x111318";
 
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic"]);
 const DEFAULT_SLIDE_SEC = 3.5;
@@ -179,6 +200,31 @@ export class CreateSlideshowUseCase {
       emit(Math.round(((index + 1) / input.sources.length) * 100));
     }
 
+    // Logo: a arte de abertura/encerramento é gerada como PNG comum e entra
+    // na lista como qualquer foto, então todo o caminho já testado (transição,
+    // duração, codificação) vale pra ela sem tratamento especial.
+    const logoMode = input.logoPath ? (input.logoMode ?? "both") : undefined;
+    const usaCapa = logoMode === "intro" || logoMode === "both";
+    const usaMarca = logoMode === "watermark" || logoMode === "both";
+
+    if (usaCapa && input.logoPath) {
+      if (!existsSync(input.logoPath)) {
+        throw new Error(`Logo não encontrado: ${input.logoPath}`);
+      }
+      const cardPath = join(this.workDir, "arte-logo.png");
+      await composeLogoCard(
+        input.logoPath,
+        cardPath,
+        format.width,
+        format.height,
+        input.logoBackgroundColor ?? DEFAULT_LOGO_BACKGROUND,
+      );
+      // Mesma arte na abertura e no encerramento: é a assinatura da marca,
+      // e repeti-la fecha o vídeo com quem o assina.
+      slides.unshift({ imagePath: cardPath, durationSec: LOGO_CARD_SEC, staticFrame: true });
+      slides.push({ imagePath: cardPath, durationSec: LOGO_CARD_SEC, staticFrame: true });
+    }
+
     stageIndex = 1;
     emit(0);
 
@@ -190,6 +236,7 @@ export class CreateSlideshowUseCase {
         width: format.width,
         height: format.height,
         ...(input.audioPath ? { audioPath: input.audioPath } : {}),
+        ...(usaMarca && input.logoPath ? { watermarkPath: input.logoPath } : {}),
       },
       (progress) => emit(progress.percent),
     );

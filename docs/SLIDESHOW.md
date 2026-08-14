@@ -29,7 +29,8 @@ Consequências práticas:
 | Fotos (JPG, PNG, WEBP, BMP, TIFF, HEIC) | Um slide cada |
 | PDF | **Uma página = um slide**, rasterizada na altura da saída |
 | Site (http/https) | Página capturada e **fatiada** na proporção do vídeo |
-| Áudio (MP3, M4A, AAC, WAV, OGG) | Trilha de fundo, com fade de saída |
+| Áudio (MP3, M4A, AAC, WAV, OGG) | Trilha de fundo, com fade de entrada e saída |
+| Logo (PNG, JPG, WEBP) | Abertura/encerramento, marca d'água, ou os dois |
 
 Tudo numa lista só, porque pro usuário é uma sequência só: a foto da sala, a
 página do anúncio e o PDF convivem e são reordenáveis do mesmo jeito.
@@ -153,6 +154,52 @@ story. `buildAssSubtitles.ts` também escapa `{`, `}` e `\` — no ASS essas
 chaves delimitam tags de override, então um preço escrito `{R$ 500}`
 **sumiria da tela sem erro nenhum**.
 
+## Logo da marca
+
+Três modos, escolhidos pelo usuário:
+
+| Modo | O que faz |
+|------|-----------|
+| `intro` | Arte de abertura **e** encerramento, logo grande e centralizado |
+| `watermark` | Logo discreto no canto inferior direito, o vídeo inteiro |
+| `both` | Os dois (padrão quando há logo) |
+
+A arte de abertura é gerada como **PNG comum** (`composeLogoCard.ts`) e entra
+na lista como qualquer foto. Assim todo o caminho já testado — transição,
+duração, codificação — vale pra ela sem tratamento especial. A mesma arte
+abre e fecha: é a assinatura da marca, e repeti-la fecha o vídeo com quem o
+assina.
+
+Detalhes que não são cosméticos:
+
+* **`staticFrame` desliga o Ken Burns** nas artes de logo. Elas já vêm no
+  tamanho exato da saída; aproximar um logo só o deixaria borrado e cortado
+  nas bordas.
+* **`force_original_aspect_ratio=decrease`** em vez de esticar. Uma marca
+  horizontal e uma quadrada dão o mesmo resultado proporcional — esticar o
+  logo de um cliente seria pior que não ter logo.
+* **`format=rgba` antes do `scale`** preserva a transparência do PNG. Sem
+  isso, logo com fundo transparente ganha fundo preto ao ser redimensionado.
+* **A marca d'água entra por último**, depois da legenda: ela representa a
+  marca do corretor e não pode ficar atrás de texto.
+* **Opacidade 0,85** porque acompanha o vídeo inteiro — a marca precisa ser
+  lida sem competir com o imóvel.
+
+### O bug de processo que valeu a lição
+
+A primeira tentativa de implementar isso **não foi aplicada ao arquivo**: um
+`cd` falhou no meio do script e o patch rodou no diretório errado, em
+silêncio. O typecheck passou (as interfaces tinham entrado por outro
+caminho), o render rodou sem erro, e nada aparecia no vídeo.
+
+Só o teste que **contava pixels amarelos por região** revelou que o código
+não existia. Vale o registro: typecheck verde e render sem exceção não
+provam que uma funcionalidade visual existe — só medir o quadro prova.
+
+Coberto por dois testes que medem pixel: a marca aparece no canto e dá
+**zero fora dele**; a abertura e o encerramento têm logo grande no miolo e o
+meio do vídeo tem zero.
+
 ## Som
 
 A trilha entra com fade de 1s e sai com fade de 2s — música que começa e
@@ -271,5 +318,10 @@ menos):
 * **A ordem é a que o usuário der.** O app não reordena por cômodo nem
   escolhe a melhor foto de capa — `room.recognize` existe e poderia fazer
   isso, mas não está ligado aqui.
-* **Uma trilha só, sem corte no ritmo da música.** O fade de saída é fixo em
-  2s.
+* **Uma trilha só, sem corte no ritmo da música.** Os fades são fixos (1s na
+  entrada, 2s na saída).
+* **O app não fornece música.** A trilha é um arquivo do usuário, e é dele a
+  responsabilidade pelos direitos: música comercial em post de Instagram ou
+  YouTube costuma ser silenciada ou bloqueada automaticamente.
+* **O logo não tem posição configurável** além do canto inferior direito, nem
+  controle de tamanho.

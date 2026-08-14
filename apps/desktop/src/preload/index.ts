@@ -99,6 +99,7 @@ const digifyApi = {
   // --- Criação de vídeo a partir de fotos e PDF ---
   selectSlideshowFiles: (): Promise<string[]> => ipcRenderer.invoke("slideshow:selectFiles"),
   selectSlideshowAudio: (): Promise<string | null> => ipcRenderer.invoke("slideshow:selectAudio"),
+  selectSlideshowLogo: (): Promise<string | null> => ipcRenderer.invoke("slideshow:selectLogo"),
   getSlideshowFormats: (): Promise<SlideshowFormatDTO[]> =>
     ipcRenderer.invoke("slideshow:getFormats"),
   createSlideshow: async (
