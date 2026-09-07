@@ -267,9 +267,22 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
     return result.canceled ? [] : result.filePaths;
   });
 
-  // Endereço FIXO, nunca vindo do renderer: `openExternal` com URL arbitrária
-  // seria um vetor pra abrir qualquer coisa na máquina do usuário.
-  const YOUTUBE_AUDIO_LIBRARY = "https://studio.youtube.com/channel/UC/music";
+  /**
+   * Endereço FIXO, nunca vindo do renderer: `openExternal` com URL arbitrária
+   * seria um vetor pra abrir qualquer coisa na máquina do usuário.
+   *
+   * Sem ID de canal na URL de propósito. A biblioteca vive em
+   * `studio.youtube.com/channel/<ID>/music`, e o ID é de cada usuário — a
+   * versão anterior deste código tinha `.../channel/UC/music` chumbado, um
+   * ID inventado que não abriria nada (ID de canal real tem 24 caracteres).
+   * Sem o segmento, o Studio resolve pro canal de quem está logado.
+   *
+   * Não deu pra confirmar o redirecionamento daqui (o ambiente de
+   * desenvolvimento não tem saída pra internet), então a tela também mostra o
+   * endereço em texto: se ele cair no lugar errado, o usuário ainda chega lá
+   * pelo navegador.
+   */
+  const YOUTUBE_AUDIO_LIBRARY = "https://studio.youtube.com/music";
 
   handle("settings:get", (): UserSettings => app.userSettings.read());
 

@@ -238,9 +238,20 @@ apenas possível:
 * **Botão que abre a biblioteca** no navegador. A URL é uma **constante no
   processo main** — `shell.openExternal` com endereço vindo do renderer
   seria um vetor pra abrir qualquer coisa na máquina do usuário.
+
+  A primeira versão tinha `studio.youtube.com/channel/UC/music` chumbado:
+  um **ID de canal inventado** (ID real tem 24 caracteres), então o botão
+  não abriria nada. Corrigido pra `studio.youtube.com/music`, sem o
+  segmento — o Studio resolve pro canal de quem está logado. Como o ambiente
+  de desenvolvimento não tem saída pra internet, **o redirecionamento não
+  pôde ser confirmado aqui**; por isso a tela também mostra o endereço em
+  texto, pra que um redirecionamento errado não vire beco sem saída.
 * **Pasta de trilhas**: o usuário baixa as faixas uma vez, aponta a pasta, e
   escolher a música vira um clique numa lista em vez de navegar o diálogo de
   arquivos a cada vídeo.
+* **A tela explica o fluxo** enquanto não há pasta escolhida. "Pasta de
+  trilhas" sozinho não conta que é preciso **baixar antes**: a biblioteca é
+  online e exige login no YouTube.
 * **Só o primeiro nível da pasta** é listado: subpasta costuma ser
   organização do usuário e varrer tudo devolveria lista longa demais.
 

@@ -231,10 +231,23 @@ export function SlideshowPanel(): JSX.Element {
             <button
               className="select"
               onClick={() => void window.digify.openAudioLibrary()}
-              title="Baixe faixas livres para uso comercial e salve na sua pasta"
+              title="studio.youtube.com/music — exige login no YouTube"
             >
               ↗ YouTube Audio Library
             </button>
+
+            {pastaTrilhas ? null : (
+              // Sem isto, "pasta de trilhas" não conta que é preciso BAIXAR
+              // antes: a biblioteca é online e exige login.
+              <p className="render-panel__hint">
+                A biblioteca é online e pede login no YouTube. Baixe as faixas que
+                quiser (elas são livres para uso comercial), salve numa pasta e
+                aponte ela aqui — depois é só escolher pelo nome.
+                <br />
+                Se o botão não abrir a página certa, o endereço é{" "}
+                <strong>studio.youtube.com/music</strong>.
+              </p>
+            )}
           </div>
 
           <button
