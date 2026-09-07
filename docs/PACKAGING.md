@@ -345,15 +345,21 @@ com `Module did not self-register` e `Cannot read properties of undefined
 (reading 'close')`. Nada disso tem relação com o código que se estava
 escrevendo, e é fácil sair caçando o bug no lugar errado.
 
-O script é ferramenta **de empacotamento**, não de desenvolvimento. Rodar o
-app localmente sob Electron precisa dele; rodar os testes precisa do
-contrário. Para voltar:
+O script é ferramenta **de empacotamento**, não de desenvolvimento. Para
+voltar ao ABI do Node e destravar a suíte, use o script que o projeto já
+tem — não mexa no `node_modules` na mão:
 
 ```bash
-cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
-npx prebuild-install --runtime=node --target=$(node -p "process.versions.node") \
-  --arch=$(node -p "process.arch") --platform=$(node -p "process.platform")
+pnpm --filter @digify/desktop rebuild:node
 ```
+
+Isto é a mesma troca de ABI já descrita em
+`docs/ENGINEERING_STANDARDS.md` ("Módulo nativo: ABI do Node vs ABI do
+Electron"). O que esta seção acrescenta é que **`fix-native-abi.mjs` também
+dispara essa troca** — e de forma menos óbvia, porque quem o roda está
+pensando em empacotar, não em banco de dados. Regra prática: depois de abrir
+o app de verdade pra verificar alguma coisa, rode `rebuild:node` antes da
+suíte — senão a suíte mente.
 
 Regra prática: depois de abrir o app de verdade pra verificar alguma coisa,
 **restaure o ABI do Node antes de rodar a suíte** — senão a suíte mente.
