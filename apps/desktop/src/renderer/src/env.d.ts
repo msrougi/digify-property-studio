@@ -68,6 +68,17 @@ interface MusicTrackDTO {
   name: string;
 }
 
+interface MusicSearchResultDTO {
+  id: string;
+  title: string;
+  creator: string;
+  /** `cc0` não exige crédito; `by` exige. A tela mostra isso ANTES de baixar. */
+  license: "cc0" | "by";
+  sourceUrl: string;
+  downloadUrl: string;
+  durationSec?: number;
+}
+
 interface UserSettingsDTO {
   logoPath?: string;
   logoMode?: "intro" | "watermark" | "both";
@@ -98,6 +109,8 @@ interface SlideshowDTO {
   slideCount: number;
   pdfPageCount: number;
   webSliceCount: number;
+  creditsPath?: string;
+  creditsText?: string;
 }
 
 interface ExportPresetDTO {
@@ -148,6 +161,8 @@ interface DigifyApi {
   selectMusicFolder(): Promise<string | null>;
   listMusic(folder: string): Promise<MusicTrackDTO[]>;
   openAudioLibrary(): Promise<void>;
+  searchMusic(text: string): Promise<MusicSearchResultDTO[]>;
+  downloadMusic(track: MusicSearchResultDTO): Promise<MusicTrackDTO>;
   getSettings(): Promise<UserSettingsDTO>;
   saveSettings(settings: UserSettingsDTO): Promise<UserSettingsDTO>;
   getSlideshowFormats(): Promise<SlideshowFormatDTO[]>;

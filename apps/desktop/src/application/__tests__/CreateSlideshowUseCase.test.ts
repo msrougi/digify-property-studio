@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,7 @@ import { readVideoMetadata } from "../../infrastructure/ffmpeg/ffprobeMetadata.j
 import { extractGrayscaleFrame } from "../../infrastructure/ffmpeg/extractGrayscaleFrame.js";
 import { SlideshowRenderer } from "../../infrastructure/render/SlideshowRenderer.js";
 import { CreateSlideshowUseCase } from "../CreateSlideshowUseCase.js";
+import { creditSidecarPath } from "../musicCredits.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -269,6 +270,73 @@ describe("CreateSlideshowUseCase", () => {
 
       const meta = await readVideoMetadata(join(dir, "video.mp4"));
       expect(meta.width).toBe(1920);
+    },
+    180_000,
+  );
+
+  it(
+    "grava o crédito ao lado do vídeo quando a trilha exige, e não grava quando não exige",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "digify-slides-credito-"));
+      const foto = join(dir, "sala.png");
+      await makePhoto(foto, "red");
+
+      /** Trilha real com a ficha de licença ao lado, como a baixada da Openverse. */
+      async function trilhaCom(license: "by" | "cc0", nome: string): Promise<string> {
+        const audioPath = join(dir, nome);
+        await execFileAsync(FFMPEG_PATH, [
+          "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=4", audioPath,
+        ]);
+        writeFileSync(
+          creditSidecarPath(audioPath),
+          JSON.stringify({
+            title: "Sunset Drive",
+            creator: "Ana Ribeiro",
+            license,
+            sourceUrl: "https://openverse.org/audio/1",
+          }),
+          "utf8",
+        );
+        return audioPath;
+      }
+
+      const comCredito = join(dir, "com-credito.mp4");
+      const resultadoBy = await new CreateSlideshowUseCase(
+        new SlideshowRenderer(),
+        join(dir, "trabalho-by"),
+      ).execute({
+        sources: [foto],
+        outputPath: comCredito,
+        slideDurationSec: 2,
+        audioPath: await trilhaCom("by", "faixa-by.mp3"),
+      });
+
+      // CC BY exige crédito: o arquivo tem que existir no disco, ao lado do
+      // vídeo, com autor, título, licença e origem.
+      expect(resultadoBy.creditsPath).toBe(join(dir, "com-credito-creditos.txt"));
+      const texto = readFileSync(resultadoBy.creditsPath as string, "utf8");
+      expect(texto).toContain("Sunset Drive");
+      expect(texto).toContain("Ana Ribeiro");
+      expect(texto).toContain("CC BY 4.0");
+      expect(texto).toContain("https://openverse.org/audio/1");
+      // A tela mostra o texto pra copiar; ele tem que bater com o arquivo.
+      expect(resultadoBy.creditsText).toBe(texto);
+
+      const semCredito = join(dir, "sem-credito.mp4");
+      const resultadoCc0 = await new CreateSlideshowUseCase(
+        new SlideshowRenderer(),
+        join(dir, "trabalho-cc0"),
+      ).execute({
+        sources: [foto],
+        outputPath: semCredito,
+        slideDurationSec: 2,
+        audioPath: await trilhaCom("cc0", "faixa-cc0.mp3"),
+      });
+
+      // CC0 não exige nada. Nem o campo, nem o arquivo — encher a descrição do
+      // anúncio com crédito desnecessário é gastar espaço que vende.
+      expect(resultadoCc0.creditsPath).toBeUndefined();
+      expect(existsSync(join(dir, "sem-credito-creditos.txt"))).toBe(false);
     },
     180_000,
   );

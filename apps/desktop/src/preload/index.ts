@@ -15,6 +15,7 @@ import type {
   SlideshowDTO,
 } from "../main/ipc.js";
 import type { MusicTrack, UserSettings } from "../application/UserSettings.js";
+import type { MusicSearchResult } from "../application/MusicLibrary.js";
 import { toMediaUrl } from "../shared/media.js";
 
 /**
@@ -105,6 +106,12 @@ const digifyApi = {
   listMusic: (folder: string): Promise<MusicTrack[]> =>
     ipcRenderer.invoke("slideshow:listMusic", folder),
   openAudioLibrary: (): Promise<void> => ipcRenderer.invoke("slideshow:openAudioLibrary"),
+  searchMusic: (text: string): Promise<MusicSearchResult[]> =>
+    ipcRenderer.invoke("music:search", text),
+  // Sem parâmetro de destino: a pasta vem das preferências, no processo
+  // principal. A tela pede a faixa, não escolhe onde escrever no disco.
+  downloadMusic: (track: MusicSearchResult): Promise<MusicTrack> =>
+    ipcRenderer.invoke("music:download", track),
   getSettings: (): Promise<UserSettings> => ipcRenderer.invoke("settings:get"),
   saveSettings: (settings: UserSettings): Promise<UserSettings> =>
     ipcRenderer.invoke("settings:save", settings),

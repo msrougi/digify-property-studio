@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ProgressBar } from "./ProgressBar.js";
 import { VideoPlayer } from "./VideoPlayer.js";
 import { useElapsedTime } from "../useElapsedTime.js";
+import { readableError } from "../format.js";
 
 /** Só o nome do arquivo — o caminho completo estoura a largura e não ajuda. */
 function baseName(path: string): string {
@@ -54,6 +55,11 @@ export function SlideshowPanel(): JSX.Element {
   const [logo, setLogo] = useState<string | null>(null);
   const [pastaTrilhas, setPastaTrilhas] = useState<string | null>(null);
   const [trilhas, setTrilhas] = useState<MusicTrackDTO[]>([]);
+  const [buscaMusica, setBuscaMusica] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [achadas, setAchadas] = useState<MusicSearchResultDTO[] | null>(null);
+  const [erroBusca, setErroBusca] = useState<string | null>(null);
+  const [baixando, setBaixando] = useState<string | null>(null);
   const [modoLogo, setModoLogo] = useState<"intro" | "watermark" | "both">("both");
   const [status, setStatus] = useState<"idle" | "criando" | "pronto" | "erro">("idle");
   const [erro, setErro] = useState<string | null>(null);
@@ -92,6 +98,44 @@ export function SlideshowPanel(): JSX.Element {
     setPastaTrilhas(pasta);
     setTrilhas(await window.digify.listMusic(pasta));
     salvarPreferencias({ musicFolder: pasta });
+  }
+
+  async function buscarMusica(): Promise<void> {
+    const texto = buscaMusica.trim();
+    if (texto === "" || buscando) return;
+    setBuscando(true);
+    setErroBusca(null);
+    try {
+      setAchadas(await window.digify.searchMusic(texto));
+    } catch (error) {
+      // A busca é a única parte do app que depende de internet. Sem mensagem
+      // clara, ficar offline pareceria "não existe música com esse nome".
+      setErroBusca(readableError(error, "Não consegui buscar trilhas agora."));
+      setAchadas(null);
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  /**
+   * Baixa a faixa pra pasta e já a deixa selecionada.
+   *
+   * Selecionar sozinho é o que o usuário quer em 100% dos casos: ele buscou,
+   * ouviu e clicou em baixar — pedir pra escolher de novo numa lista logo
+   * depois seria trabalho repetido.
+   */
+  async function baixarMusica(faixa: MusicSearchResultDTO): Promise<void> {
+    setBaixando(faixa.id);
+    setErroBusca(null);
+    try {
+      const baixada = await window.digify.downloadMusic(faixa);
+      setTrilhas(pastaTrilhas ? await window.digify.listMusic(pastaTrilhas) : [baixada]);
+      setAudio(baixada.path);
+    } catch (error) {
+      setErroBusca(readableError(error, "Não consegui baixar essa faixa."));
+    } finally {
+      setBaixando(null);
+    }
   }
 
   const temPdf = arquivos.some(isPdf);
@@ -152,7 +196,7 @@ export function SlideshowPanel(): JSX.Element {
       setStatus("pronto");
     } catch (error) {
       console.error(error);
-      setErro(error instanceof Error ? error.message : "Não conseguimos montar o vídeo.");
+      setErro(readableError(error, "Não conseguimos montar o vídeo."));
       setStatus("erro");
     }
   }
@@ -244,6 +288,85 @@ export function SlideshowPanel(): JSX.Element {
             >
               ↗ YouTube Audio Library
             </button>
+
+            <div className="slideshow__busca-musica">
+              <input
+                className="select slideshow__url-input"
+                type="search"
+                value={buscaMusica}
+                placeholder="Buscar trilha livre (piano, ambiente, upbeat…)"
+                onChange={(event) => setBuscaMusica(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void buscarMusica();
+                }}
+                disabled={status === "criando"}
+              />
+              <button
+                className="select"
+                onClick={() => void buscarMusica()}
+                disabled={buscando || buscaMusica.trim() === "" || status === "criando"}
+              >
+                {buscando ? "Buscando…" : "Buscar"}
+              </button>
+            </div>
+
+            {erroBusca ? <p className="render-panel__error">{erroBusca}</p> : null}
+
+            {achadas?.length === 0 ? (
+              <p className="render-panel__hint">
+                Nada encontrado para esse termo. Tente em inglês — o acervo é
+                internacional, e “piano” traz mais que “piano suave”.
+              </p>
+            ) : null}
+
+            {achadas && achadas.length > 0 ? (
+              <ul className="slideshow__achadas">
+                {achadas.map((faixa) => (
+                  <li key={faixa.id} className="slideshow__achada">
+                    <div>
+                      <strong>{faixa.title}</strong>
+                      <span className="slideshow__achada-autor"> — {faixa.creator}</span>
+                      {/*
+                        A licença aparece ANTES de baixar, não depois. `by`
+                        obriga a creditar na descrição do post; descobrir isso
+                        só depois de publicar seria descobrir tarde demais.
+                      */}
+                      <span className="slideshow__licenca">
+                        {faixa.license === "cc0"
+                          ? "CC0 · sem precisar creditar"
+                          : "CC BY · precisa creditar"}
+                      </span>
+                    </div>
+                    <div className="slideshow__achada-acoes">
+                      {/*
+                        Ouvir antes de baixar: trilha errada só se percebe
+                        ouvindo, e baixar pra descobrir enche a pasta de lixo.
+                      */}
+                      <audio controls preload="none" src={faixa.downloadUrl} />
+                      <button
+                        className="select"
+                        onClick={() => void baixarMusica(faixa)}
+                        disabled={baixando !== null || !pastaTrilhas}
+                        title={
+                          pastaTrilhas
+                            ? "Baixa para sua pasta de trilhas"
+                            : "Escolha antes a pasta onde suas trilhas ficam"
+                        }
+                      >
+                        {baixando === faixa.id ? "Baixando…" : "Usar esta"}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {achadas && achadas.length > 0 && !pastaTrilhas ? (
+              <p className="render-panel__hint">
+                Escolha a pasta de trilhas acima para poder baixar — é onde as
+                faixas ficam guardadas para os próximos vídeos.
+              </p>
+            ) : null}
 
             {pastaTrilhas ? null : (
               // Sem isto a tela não conta duas coisas que o usuário perguntou:
@@ -430,6 +553,31 @@ export function SlideshowPanel(): JSX.Element {
               </button>
             </div>
             {salvoEm ? <p className="render-panel__result-path">Salvo em: {salvoEm}</p> : null}
+
+            {/*
+              Crédito só aparece quando a licença da trilha exige (CC BY). CC0
+              não exige nada, e mostrar um crédito desnecessário faria o
+              corretor gastar linha da descrição do anúncio com isso.
+            */}
+            {resultado.creditsText ? (
+              <div className="slideshow__creditos">
+                <p className="render-panel__result-title">
+                  Cole isto na descrição do post
+                </p>
+                <p className="render-panel__hint">
+                  A licença desta trilha <strong>exige crédito</strong>. Publicar
+                  sem ele é violação — e o arquivo abaixo também ficou salvo ao
+                  lado do vídeo.
+                </p>
+                <pre className="slideshow__creditos-texto">{resultado.creditsText}</pre>
+                <button
+                  className="select"
+                  onClick={() => void navigator.clipboard.writeText(resultado.creditsText ?? "")}
+                >
+                  Copiar crédito
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

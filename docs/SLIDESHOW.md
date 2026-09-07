@@ -292,11 +292,101 @@ Duas proteções que a leitura faz, cobertas por teste:
   aponta pra disco.)
 * **Arquivo corrompido não impede o app de abrir** — começa limpo.
 
-### Limitação honesta
+## Busca de trilha embutida (Openverse)
 
-Algumas faixas da YouTube Audio Library **exigem atribuição** na descrição
-do post. O app não verifica nem avisa sobre isso: a licença de cada faixa
-está no site, e conferir é do usuário.
+A limitação anterior era real: o app abria a biblioteca e parava ali. Baixar,
+achar a pasta, arrastar o arquivo e conferir a licença ficava tudo com o
+usuário — e a licença, na prática, ninguém conferia.
+
+A **Openverse** (projeto oficial do Creative Commons) resolve isso porque tem
+o que a YouTube Audio Library não tem: **uma API pública, sem chave e sem
+login**, com filtro de licença na própria consulta. Agora dá pra buscar,
+ouvir e baixar sem sair do app.
+
+O que ela perde: **curadoria**. A Openverse agrega Jamendo, ccMixter,
+Freesound e Wikimedia, então gravação de campo e sample solto vêm misturados
+com música — enquanto a biblioteca do YouTube é curada pra quem faz vídeo.
+Por isso o botão da YouTube Audio Library **continua na tela**: quem quer
+garimpar tem a busca, quem quer o acervo curado tem o link.
+
+### O filtro de licença é o coração disto
+
+`COMMERCIAL_SAFE_LICENSES = ["cc0", "by"]`. A lista é curta de propósito, e
+cada exclusão tem motivo:
+
+| Licença | Por que fica de fora |
+| --- | --- |
+| `by-nc` | Proíbe uso comercial — e corretor vendendo imóvel **é** uso comercial. |
+| `by-nd` | Proíbe obra derivada, e vídeo **com** a música por cima é derivada. |
+| `by-sa` | Obriga a obra derivada à mesma licença: contaminaria o vídeo do cliente. |
+
+A checagem é por **igualdade exata, nunca `includes`**. `by-nc` contém `by` —
+um filtro por substring deixaria passar justamente a licença que proíbe o
+único uso que o app tem. O teste cobre as quatro licenças perigosas uma a uma.
+
+O filtro roda **duas vezes**: vai como parâmetro na consulta *e* é reaplicado
+em cada item da resposta. Confiar só no parâmetro seria confiar que um
+servidor remoto respeita o filtro que pedimos.
+
+### Crédito gerado, não lembrado
+
+Faixa `CC BY` **exige** citar autor, título, licença e origem. Deixar isso
+com o usuário é garantir que ele esqueça — e publicar sem crédito anula a
+razão de ter escolhido música livre.
+
+Então o crédito é infraestrutura, em três pontos:
+
+1. **Na hora de baixar**, uma ficha `.credito.json` é gravada ao lado do
+   áudio. Sem ela, meses depois, o crédito seria impossível de reconstruir —
+   o MP3 na pasta não diz de quem é.
+2. **Na tela de resultado**, o texto pronto aparece com um botão de copiar. O
+   momento de usar o crédito é o de publicar, e é ali que ele tem que estar.
+3. **Ao lado do vídeo**, como `<nome>-creditos.txt`. Publicar pode ser dias
+   depois, de outra máquina, e aí a tela já sumiu.
+
+Faixa `CC0` **não gera nada** — não exige crédito, e encher a descrição do
+anúncio com atribuição desnecessária gasta espaço que deveria vender o imóvel.
+
+A leitura da ficha é estrita: JSON corrompido, licença desconhecida, autor em
+branco ou campo faltando devolvem `null`, e o vídeo sai sem crédito. A pasta
+é editável pelo usuário, e **afirmar a licença errada num post publicado é
+pior que não afirmar nada**.
+
+### Decisão de produto: buscar não é sortear
+
+A automação para na **busca e no download**. O app não escolhe trilha sozinho
+a cada vídeo, e isso foi deliberado: corretor constrói identidade sonora —
+quem assiste três vídeos do mesmo corretor reconhece a trilha. Sortear uma
+faixa por vídeo destruiria isso em nome de economizar um clique.
+
+### Segurança e limites
+
+* **A pasta de destino vem das preferências, no processo main** — nunca do
+  renderer. Aceitar um caminho vindo da tela daria à interface o poder de
+  escrever em qualquer lugar do disco.
+* **É o único ponto do app que sai pra internet por conta própria**, e só
+  quando o usuário digita e aperta buscar. Todo o resto roda offline.
+* **`fetch` com prazo de 15s**: API fora do ar não pode deixar a tela travada
+  pra sempre.
+* **Leitura defensiva**: item sem `id`, `url` ou `title` é descartado em vez
+  de virar faixa quebrada na lista.
+
+### O que NÃO pôde ser verificado aqui
+
+**O formato da resposta da API.** O ambiente de desenvolvimento deste projeto
+não tem saída pra internet (`403 to CONNECT` no proxy), então a chamada HTTP
+real nunca rodou. Os campos seguem a documentação pública.
+
+Isso é dito aqui porque muda o que os testes provam. Eles cobrem o
+comportamento **com um dublê no lugar da rede**: o filtro de licença, o
+descarte de item incompleto, a mensagem de erro legível, o nome de arquivo, a
+ficha de crédito. O que eles **não** provam é que os campos da Openverse se
+chamam o que este código espera.
+
+A leitura defensiva existe justamente por isso: se a API divergir, o sintoma
+será **"nenhum resultado"** — nunca uma faixa que não toca ou um crédito
+errado. A verificação real é rodar a busca na máquina do usuário; se o
+formato divergir, é ajuste de nome de campo, não de arquitetura.
 
 ## Ken Burns sem tremor
 
@@ -397,8 +487,14 @@ menos):
   isso, mas não está ligado aqui.
 * **Uma trilha só, sem corte no ritmo da música.** Os fades são fixos (1s na
   entrada, 2s na saída).
-* **O app não fornece música.** A trilha é um arquivo do usuário, e é dele a
-  responsabilidade pelos direitos: música comercial em post de Instagram ou
-  YouTube costuma ser silenciada ou bloqueada automaticamente.
+* **O app não hospeda música.** Ele busca e baixa da Openverse, já filtrada
+  por licença segura pra uso comercial, mas quem escolhe é o usuário — e
+  faixa trazida de fora pelo botão "Adicionar música" continua sem nenhuma
+  verificação de licença: música comercial em post de Instagram ou YouTube
+  costuma ser silenciada ou bloqueada automaticamente.
+* **A chamada HTTP à Openverse nunca rodou contra o servidor real** (o
+  ambiente de desenvolvimento não tem saída pra internet). Se o formato da
+  resposta divergir, a busca devolve "nenhum resultado" — nunca faixa
+  quebrada. Verificação real é na máquina do usuário.
 * **O logo não tem posição configurável** além do canto inferior direito, nem
   controle de tamanho.

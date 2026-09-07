@@ -719,3 +719,87 @@ body {
   flex: 1;
   min-width: 220px;
 }
+
+/*
+ * Busca de trilha livre. Mesma linha inteira da pasta de trilhas: campo de
+ * texto espremido ao lado dos botões não caberia um termo de busca.
+ */
+.slideshow__busca-musica {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+}
+
+.slideshow__achadas {
+  flex-basis: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /*
+   * Rolagem em vez de lista crescendo pra baixo: os controles de montar o
+   * vídeo ficam ABAIXO daqui, e uma dúzia de resultados os empurraria pra
+   * fora da tela.
+   */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.slideshow__achada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.slideshow__achada-autor {
+  color: var(--text-muted);
+}
+
+.slideshow__achada-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slideshow__achada-acoes audio {
+  height: 32px;
+  max-width: 220px;
+}
+
+/*
+ * A licença ganha destaque de rótulo próprio, e não vira mais um texto cinza
+ * na linha: é a informação que decide se a faixa pode ser usada no anúncio.
+ */
+.slideshow__licenca {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.slideshow__creditos {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.slideshow__creditos-texto {
+  background: var(--surface-1, var(--surface-2));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  /* O crédito é uma linha longa com URL: quebra, não rola pro lado. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}

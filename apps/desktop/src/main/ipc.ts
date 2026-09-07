@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { dialog, ipcMain, shell, type BrowserWindow } from "electron";
 import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
@@ -7,6 +7,7 @@ import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapabi
 import { EXPORT_PRESETS, type ExportPresetId } from "../infrastructure/export/exportPresets.js";
 import { SLIDESHOW_FORMATS } from "../application/CreateSlideshowUseCase.js";
 import type { MusicTrack, UserSettings } from "../application/UserSettings.js";
+import type { MusicSearchResult } from "../application/MusicLibrary.js";
 import { listMusicTracks } from "../infrastructure/settings/DiskUserSettings.js";
 import type { StageProgress } from "../application/progress.js";
 
@@ -96,6 +97,9 @@ export interface SlideshowDTO {
   slideCount: number;
   pdfPageCount: number;
   webSliceCount: number;
+  /** Texto de crédito gravado ao lado do vídeo, quando a licença da trilha exige. */
+  creditsPath?: string;
+  creditsText?: string;
 }
 
 export interface ExportPresetDTO {
@@ -307,6 +311,28 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
 
   handle("slideshow:openAudioLibrary", async (): Promise<void> => {
     await shell.openExternal(YOUTUBE_AUDIO_LIBRARY);
+  });
+
+  handle(
+    "music:search",
+    (_event, text: string): Promise<MusicSearchResult[]> =>
+      app.musicLibrary.search({ text }),
+  );
+
+  /**
+   * Baixa a faixa PRA PASTA DE TRILHAS do usuário — o destino vem das
+   * preferências, nunca do renderer. Aceitar um caminho da tela daria à
+   * interface o poder de escrever em qualquer lugar do disco.
+   */
+  handle("music:download", async (_event, track: MusicSearchResult): Promise<MusicTrack> => {
+    const folder = app.userSettings.read().musicFolder;
+    if (!folder) {
+      throw new DomainError("Escolha primeiro a pasta onde suas trilhas ficam.", "NO_MUSIC_FOLDER");
+    }
+    const path = await app.musicLibrary.download(track, folder);
+    // Mesmo formato de `listMusicTracks`: nome sem extensão, pra faixa recém
+    // baixada e faixa que já estava na pasta aparecerem iguais na lista.
+    return { name: basename(path, extname(path)), path };
   });
 
   handle("slideshow:selectLogo", async (): Promise<string | null> => {

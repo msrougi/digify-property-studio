@@ -1,5 +1,7 @@
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import { readTrackCredit } from "../infrastructure/music/trackCreditFile.js";
+import { buildCreditsText } from "./musicCredits.js";
 import { rasterizePdf } from "../infrastructure/pdf/rasterizePdf.js";
 import { composeLogoCard } from "../infrastructure/render/composeLogoCard.js";
 import { SlideshowRenderer, type Slide } from "../infrastructure/render/SlideshowRenderer.js";
@@ -59,6 +61,19 @@ export interface CreateSlideshowResult {
   pdfPageCount: number;
   /** Quantos slides vieram de captura de site. */
   webSliceCount: number;
+  /**
+   * Arquivo de texto com o crédito da trilha, quando a licença exige um.
+   * Ausente quando a música é CC0, quando não tem ficha de licença, ou quando
+   * o vídeo é mudo.
+   */
+  creditsPath?: string;
+  /**
+   * O crédito em si. Vai junto do caminho porque a tela precisa MOSTRAR o
+   * texto pra ser copiado na hora de publicar — ela não lê arquivo do disco, e
+   * mandar o usuário abrir um `.txt` pra copiar seria um passo a mais no
+   * momento em que ele só quer postar.
+   */
+  creditsText?: string;
 }
 
 /** Segundos de cada arte de abertura/encerramento. */
@@ -247,7 +262,32 @@ export class CreateSlideshowUseCase {
       slideCount: slides.length,
       pdfPageCount,
       webSliceCount,
+      ...(input.audioPath ? this.writeCredits(input.audioPath, input.outputPath) : {}),
     };
+  }
+
+  /**
+   * Grava o texto de crédito ao lado do vídeo, quando a trilha exige um.
+   *
+   * Fica ao lado do arquivo, e não só na tela, porque o momento de usar o
+   * crédito é o de publicar — que pode ser dias depois, de outra máquina. Um
+   * aviso na tela do render teria sumido até lá.
+   */
+  private writeCredits(
+    audioPath: string,
+    outputPath: string,
+  ): { creditsPath?: string; creditsText?: string } {
+    const credit = readTrackCredit(audioPath);
+    if (!credit) return {};
+
+    // Vazio significa "esta licença não exige crédito" (CC0). Criar um arquivo
+    // vazio só faria o usuário abrir pra descobrir que não havia nada.
+    const creditsText = buildCreditsText([credit]);
+    if (creditsText === "") return {};
+
+    const creditsPath = outputPath.replace(/\.mp4$/i, "") + "-creditos.txt";
+    writeFileSync(creditsPath, creditsText, "utf8");
+    return { creditsPath, creditsText };
   }
 }
 

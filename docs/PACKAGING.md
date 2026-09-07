@@ -332,3 +332,28 @@ repetir a mesma disciplina de verificação usada no Linux (rodar o
 executável de verdade, importar um vídeo real, confirmar que o pipeline
 completo funciona) numa máquina Mac/Windows real ou CI com os runners
 correspondentes — não assumir que "buildou sem erro" equivale a "funciona".
+
+## Oitavo problema real: rodar `fix-native-abi.mjs` quebra a suíte de testes
+
+`fix-native-abi.mjs` troca o binário do `better-sqlite3` pela build do
+**Electron** (`NODE_MODULE_VERSION 130` no Electron 33). O `vitest` roda em
+**Node puro** (ABI 127) e não consegue carregar esse binário.
+
+O sintoma é desproporcional ao gesto: rodar o script uma vez faz **23 testes
+de 8 arquivos** falharem de uma vez — todos os que tocam o banco —
+com `Module did not self-register` e `Cannot read properties of undefined
+(reading 'close')`. Nada disso tem relação com o código que se estava
+escrevendo, e é fácil sair caçando o bug no lugar errado.
+
+O script é ferramenta **de empacotamento**, não de desenvolvimento. Rodar o
+app localmente sob Electron precisa dele; rodar os testes precisa do
+contrário. Para voltar:
+
+```bash
+cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
+npx prebuild-install --runtime=node --target=$(node -p "process.versions.node") \
+  --arch=$(node -p "process.arch") --platform=$(node -p "process.platform")
+```
+
+Regra prática: depois de abrir o app de verdade pra verificar alguma coisa,
+**restaure o ABI do Node antes de rodar a suíte** — senão a suíte mente.

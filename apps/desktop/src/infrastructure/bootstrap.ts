@@ -38,6 +38,7 @@ import { DiskRenderedFileCleaner } from "./render/DiskRenderedFileCleaner.js";
 import { FrameByFrameCleaner } from "./render/FrameByFrameCleaner.js";
 import { SlideshowRenderer } from "./render/SlideshowRenderer.js";
 import { DiskUserSettings } from "./settings/DiskUserSettings.js";
+import { OpenverseMusicLibrary } from "./music/OpenverseMusicLibrary.js";
 import { ElectronWebPageCapturer } from "./web/ElectronWebPageCapturer.js";
 
 /**
@@ -144,6 +145,10 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
     // (ferramenta de passagem), mas logo e pasta de trilhas são configuração
     // de quem usa — reapontar o próprio logo toda vez seria atrito puro.
     userSettings: new DiskUserSettings(join(userDataDir, "preferencias.json")),
+    // Busca de trilha livre. É o ÚNICO ponto do app que sai pra internet por
+    // conta própria; tudo o mais roda offline, e a busca só acontece quando o
+    // usuário digita e aperta buscar.
+    musicLibrary: new OpenverseMusicLibrary(),
     exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,
     objectRepository,
