@@ -221,6 +221,51 @@ faixa: um verifica que faixa curta não encurta o vídeo; o outro mede o
 **volume real** (`volumedetect`) em duas janelas, confirmando que o miolo tem
 som e que o último segundo, dentro do fade, tem pelo menos 5 dB a menos.
 
+## Trilhas: pasta do usuário, não biblioteca embutida
+
+O app **não fornece música** — e isso é decisão, não lacuna. Redistribuir
+faixas exigiria licenciamento, e o risco real do corretor não é achar
+música: é publicar com a música errada.
+
+> Música comercial em post de Instagram, YouTube ou TikTok costuma ser
+> **silenciada ou bloqueada** automaticamente pelo Content ID. Um vídeo bem
+> montado com a trilha errada vira um vídeo mudo no feed do cliente.
+
+O caminho escolhido com o dono do produto foi a **YouTube Audio Library**
+(faixas livres para uso comercial). O app torna isso prático em vez de
+apenas possível:
+
+* **Botão que abre a biblioteca** no navegador. A URL é uma **constante no
+  processo main** — `shell.openExternal` com endereço vindo do renderer
+  seria um vetor pra abrir qualquer coisa na máquina do usuário.
+* **Pasta de trilhas**: o usuário baixa as faixas uma vez, aponta a pasta, e
+  escolher a música vira um clique numa lista em vez de navegar o diálogo de
+  arquivos a cada vídeo.
+* **Só o primeiro nível da pasta** é listado: subpasta costuma ser
+  organização do usuário e varrer tudo devolveria lista longa demais.
+
+### Preferências sobrevivem à sessão
+
+`preferencias.json` fica **fora** da lista de `sessionData.ts`. Projetos e
+vídeos são apagados a cada abertura porque o app é ferramenta de passagem,
+mas logo, modo do logo e pasta de trilhas são configuração de quem usa —
+reapontar o próprio logo a cada vídeo seria atrito puro.
+
+Duas proteções que a leitura faz, cobertas por teste:
+
+* **Caminho que não existe mais é esquecido.** Logo movido, pendrive
+  removido, pasta renomeada — devolver o caminho velho faria o render falhar
+  lá na frente com "arquivo não encontrado". Esquecer aqui faz a tela
+  simplesmente pedir de novo. (`logoMode` sobrevive: é preferência pura, não
+  aponta pra disco.)
+* **Arquivo corrompido não impede o app de abrir** — começa limpo.
+
+### Limitação honesta
+
+Algumas faixas da YouTube Audio Library **exigem atribuição** na descrição
+do post. O app não verifica nem avisa sobre isso: a licença de cada faixa
+está no site, e conferir é do usuário.
+
 ## Ken Burns sem tremor
 
 O `zoompan` do FFmpeg calcula o recorte em passos inteiros de pixel. Numa

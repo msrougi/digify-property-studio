@@ -52,6 +52,8 @@ export function SlideshowPanel(): JSX.Element {
   const [usarTextoPdf, setUsarTextoPdf] = useState(true);
   const [urlSite, setUrlSite] = useState("");
   const [logo, setLogo] = useState<string | null>(null);
+  const [pastaTrilhas, setPastaTrilhas] = useState<string | null>(null);
+  const [trilhas, setTrilhas] = useState<MusicTrackDTO[]>([]);
   const [modoLogo, setModoLogo] = useState<"intro" | "watermark" | "both">("both");
   const [status, setStatus] = useState<"idle" | "criando" | "pronto" | "erro">("idle");
   const [erro, setErro] = useState<string | null>(null);
@@ -62,7 +64,35 @@ export function SlideshowPanel(): JSX.Element {
 
   useEffect(() => {
     void window.digify.getSlideshowFormats().then(setFormatos);
+    // Logo e pasta de trilhas ficam salvos entre execuções: reapontar o
+    // próprio logo a cada vídeo seria atrito puro.
+    void window.digify.getSettings().then((prefs) => {
+      if (prefs.logoPath) setLogo(prefs.logoPath);
+      if (prefs.logoMode) setModoLogo(prefs.logoMode);
+      if (prefs.musicFolder) {
+        setPastaTrilhas(prefs.musicFolder);
+        void window.digify.listMusic(prefs.musicFolder).then(setTrilhas);
+      }
+    });
   }, []);
+
+  /** Grava a preferência já com o valor novo — `setState` não é imediato. */
+  function salvarPreferencias(mudanca: Partial<UserSettingsDTO>): void {
+    void window.digify.saveSettings({
+      ...(logo ? { logoPath: logo } : {}),
+      logoMode: modoLogo,
+      ...(pastaTrilhas ? { musicFolder: pastaTrilhas } : {}),
+      ...mudanca,
+    });
+  }
+
+  async function escolherPastaTrilhas(): Promise<void> {
+    const pasta = await window.digify.selectMusicFolder();
+    if (!pasta) return;
+    setPastaTrilhas(pasta);
+    setTrilhas(await window.digify.listMusic(pasta));
+    salvarPreferencias({ musicFolder: pasta });
+  }
 
   const temPdf = arquivos.some(isPdf);
   const temSite = arquivos.some(isSite);
@@ -177,9 +207,44 @@ export function SlideshowPanel(): JSX.Element {
             {audio ? `♪ ${baseName(audio)}` : "Adicionar música"}
           </button>
 
+          <div className="slideshow__trilhas">
+            {trilhas.length > 0 ? (
+              <select
+                className="select slideshow__trilhas-lista"
+                value={audio ?? ""}
+                onChange={(event) => setAudio(event.target.value || null)}
+                disabled={status === "criando"}
+              >
+                <option value="">Sem música</option>
+                {trilhas.map((faixa) => (
+                  <option key={faixa.path} value={faixa.path}>
+                    ♪ {faixa.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <button className="select" onClick={escolherPastaTrilhas} disabled={status === "criando"}>
+              {pastaTrilhas
+                ? `Pasta: ${baseName(pastaTrilhas)} (${trilhas.length})`
+                : "Escolher pasta de trilhas"}
+            </button>
+            <button
+              className="select"
+              onClick={() => void window.digify.openAudioLibrary()}
+              title="Baixe faixas livres para uso comercial e salve na sua pasta"
+            >
+              ↗ YouTube Audio Library
+            </button>
+          </div>
+
           <button
             className="select"
-            onClick={async () => setLogo(await window.digify.selectSlideshowLogo())}
+            onClick={async () => {
+              const escolhido = await window.digify.selectSlideshowLogo();
+              if (!escolhido) return;
+              setLogo(escolhido);
+              salvarPreferencias({ logoPath: escolhido });
+            }}
             disabled={status === "criando"}
           >
             {logo ? `◆ ${baseName(logo)}` : "Adicionar logo"}
@@ -190,7 +255,11 @@ export function SlideshowPanel(): JSX.Element {
               <select
                 className="select"
                 value={modoLogo}
-                onChange={(event) => setModoLogo(event.target.value as typeof modoLogo)}
+                onChange={(event) => {
+                  const modo = event.target.value as typeof modoLogo;
+                  setModoLogo(modo);
+                  salvarPreferencias({ logoMode: modo });
+                }}
                 disabled={status === "criando"}
               >
                 {MODOS_LOGO.map((modo) => (
@@ -201,7 +270,13 @@ export function SlideshowPanel(): JSX.Element {
               </select>
               <button
                 className="select"
-                onClick={() => setLogo(null)}
+                onClick={() => {
+                  setLogo(null);
+                  void window.digify.saveSettings({
+                    logoMode: modoLogo,
+                    ...(pastaTrilhas ? { musicFolder: pastaTrilhas } : {}),
+                  });
+                }}
                 disabled={status === "criando"}
                 title="Remover logo"
               >

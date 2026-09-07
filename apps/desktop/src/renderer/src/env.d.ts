@@ -63,6 +63,17 @@ interface ExportVideoDTO {
   status: string;
 }
 
+interface MusicTrackDTO {
+  path: string;
+  name: string;
+}
+
+interface UserSettingsDTO {
+  logoPath?: string;
+  logoMode?: "intro" | "watermark" | "both";
+  musicFolder?: string;
+}
+
 interface SlideshowFormatDTO {
   id: string;
   label: string;
@@ -134,6 +145,11 @@ interface DigifyApi {
   selectSlideshowFiles(): Promise<string[]>;
   selectSlideshowAudio(): Promise<string | null>;
   selectSlideshowLogo(): Promise<string | null>;
+  selectMusicFolder(): Promise<string | null>;
+  listMusic(folder: string): Promise<MusicTrackDTO[]>;
+  openAudioLibrary(): Promise<void>;
+  getSettings(): Promise<UserSettingsDTO>;
+  saveSettings(settings: UserSettingsDTO): Promise<UserSettingsDTO>;
   getSlideshowFormats(): Promise<SlideshowFormatDTO[]>;
   createSlideshow(
     options: CreateSlideshowOptions,

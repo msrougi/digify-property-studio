@@ -1,11 +1,13 @@
 import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { dialog, ipcMain, type BrowserWindow } from "electron";
+import { dialog, ipcMain, shell, type BrowserWindow } from "electron";
 import { DomainError, type ObjectCategory } from "@digify/domain";
 import type { Bootstrap } from "../infrastructure/bootstrap.js";
 import type { ColorProfile } from "../infrastructure/capabilities/ColorActCapability.js";
 import { EXPORT_PRESETS, type ExportPresetId } from "../infrastructure/export/exportPresets.js";
 import { SLIDESHOW_FORMATS } from "../application/CreateSlideshowUseCase.js";
+import type { MusicTrack, UserSettings } from "../application/UserSettings.js";
+import { listMusicTracks } from "../infrastructure/settings/DiskUserSettings.js";
 import type { StageProgress } from "../application/progress.js";
 
 export interface ProgressEvent extends StageProgress {
@@ -263,6 +265,35 @@ export function registerIpcHandlers(app: Bootstrap, window: BrowserWindow): void
       ],
     });
     return result.canceled ? [] : result.filePaths;
+  });
+
+  // Endereço FIXO, nunca vindo do renderer: `openExternal` com URL arbitrária
+  // seria um vetor pra abrir qualquer coisa na máquina do usuário.
+  const YOUTUBE_AUDIO_LIBRARY = "https://studio.youtube.com/channel/UC/music";
+
+  handle("settings:get", (): UserSettings => app.userSettings.read());
+
+  handle("settings:save", (_event, settings: UserSettings): UserSettings => {
+    app.userSettings.write(settings);
+    // Devolve o que foi de fato gravado: a leitura descarta caminho que não
+    // existe mais, então a tela precisa ver o resultado real, não o pedido.
+    return app.userSettings.read();
+  });
+
+  handle("slideshow:selectMusicFolder", async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog(window, {
+      properties: ["openDirectory"],
+      title: "Pasta com suas trilhas",
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  handle("slideshow:listMusic", (_event, folder: string): MusicTrack[] =>
+    listMusicTracks(folder),
+  );
+
+  handle("slideshow:openAudioLibrary", async (): Promise<void> => {
+    await shell.openExternal(YOUTUBE_AUDIO_LIBRARY);
   });
 
   handle("slideshow:selectLogo", async (): Promise<string | null> => {

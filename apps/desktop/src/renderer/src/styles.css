@@ -702,3 +702,20 @@ body {
   color: var(--text-muted);
   opacity: 0.7;
 }
+
+/*
+ * Trilhas: a lista e os dois botões ocupam uma linha inteira. `flex-basis`
+ * porque o container é flex-wrap — sem isso a lista de faixas ficaria
+ * espremida entre os outros controles.
+ */
+.slideshow__trilhas {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.slideshow__trilhas-lista {
+  flex: 1;
+  min-width: 220px;
+}

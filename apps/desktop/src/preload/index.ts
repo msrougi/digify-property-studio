@@ -14,6 +14,7 @@ import type {
   CreateSlideshowOptions,
   SlideshowDTO,
 } from "../main/ipc.js";
+import type { MusicTrack, UserSettings } from "../application/UserSettings.js";
 import { toMediaUrl } from "../shared/media.js";
 
 /**
@@ -100,6 +101,13 @@ const digifyApi = {
   selectSlideshowFiles: (): Promise<string[]> => ipcRenderer.invoke("slideshow:selectFiles"),
   selectSlideshowAudio: (): Promise<string | null> => ipcRenderer.invoke("slideshow:selectAudio"),
   selectSlideshowLogo: (): Promise<string | null> => ipcRenderer.invoke("slideshow:selectLogo"),
+  selectMusicFolder: (): Promise<string | null> => ipcRenderer.invoke("slideshow:selectMusicFolder"),
+  listMusic: (folder: string): Promise<MusicTrack[]> =>
+    ipcRenderer.invoke("slideshow:listMusic", folder),
+  openAudioLibrary: (): Promise<void> => ipcRenderer.invoke("slideshow:openAudioLibrary"),
+  getSettings: (): Promise<UserSettings> => ipcRenderer.invoke("settings:get"),
+  saveSettings: (settings: UserSettings): Promise<UserSettings> =>
+    ipcRenderer.invoke("settings:save", settings),
   getSlideshowFormats: (): Promise<SlideshowFormatDTO[]> =>
     ipcRenderer.invoke("slideshow:getFormats"),
   createSlideshow: async (
