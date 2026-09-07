@@ -38,6 +38,10 @@ morre com `NODE_MODULE_VERSION` ou `Module did not self-register`.
 Node. Esquecer disso faz 23 testes de banco falharem de uma vez, por um
 motivo que não tem nada a ver com o código que você acabou de escrever.
 
+Se o app abrir com a **janela em branco**, é quase sempre isto: o `bootstrap`
+falha antes de carregar a interface. A partir de agora a janela mostra o erro
+e o comando pra resolver, em vez de ficar branca e muda.
+
 ```bash
 pnpm --filter @digify/desktop rebuild:node   # antes de testar
 pnpm --filter @digify/desktop rebuild:electron  # antes de abrir o app
