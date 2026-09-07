@@ -249,9 +249,30 @@ apenas possível:
 * **Pasta de trilhas**: o usuário baixa as faixas uma vez, aponta a pasta, e
   escolher a música vira um clique numa lista em vez de navegar o diálogo de
   arquivos a cada vídeo.
-* **A tela explica o fluxo** enquanto não há pasta escolhida. "Pasta de
-  trilhas" sozinho não conta que é preciso **baixar antes**: a biblioteca é
-  online e exige login no YouTube.
+* **A tela explica o fluxo** enquanto não há pasta escolhida. Duas dúvidas
+  reais do usuário motivaram o texto: *"tenho que fazer login?"* (sim, é
+  exigência do Google) e *"não baixo na hora?"* (baixa — e nem precisa de
+  pasta).
+
+### Dois caminhos, não um
+
+A pasta **nunca foi obrigatória**. O botão "Adicionar música" (seletor de
+arquivo comum) sempre atendeu quem baixa a faixa na hora e usa direto. A
+pasta é atalho pra quem reusa as mesmas faixas: vira um clique por vídeo em
+vez de navegar o diálogo.
+
+Isso expôs um bug de coerência: com a pasta configurada, uma faixa escolhida
+pelo seletor **não está na lista**, então o `select` não achava o valor e
+exibia "Sem música" — **a tela mentia enquanto o vídeo saía com trilha**.
+Corrigido acrescentando a faixa de fora como opção própria, marcada "(fora
+da pasta)".
+
+### O que o app deliberadamente NÃO faz
+
+Baixar as faixas sozinho. Automatizar isso exigiria dirigir uma sessão
+logada do Google — contra os termos do YouTube, dependente de guardar
+credencial do usuário, e quebradiço a cada mudança de página. O download
+fica no navegador, onde é do usuário e é legítimo.
 * **Só o primeiro nível da pasta** é listado: subpasta costuma ser
   organização do usuário e varrer tudo devolveria lista longa demais.
 

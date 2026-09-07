@@ -216,6 +216,15 @@ export function SlideshowPanel(): JSX.Element {
                 disabled={status === "criando"}
               >
                 <option value="">Sem música</option>
+                {/*
+                  Faixa escolhida pelo botão "Adicionar música" que não está na
+                  pasta (o caso de baixar na hora). Sem esta opção o `select`
+                  não acharia o valor e exibiria "Sem música" — a tela mentiria
+                  enquanto o vídeo sai com trilha.
+                */}
+                {audio && !trilhas.some((faixa) => faixa.path === audio) ? (
+                  <option value={audio}>♪ {baseName(audio)} (fora da pasta)</option>
+                ) : null}
                 {trilhas.map((faixa) => (
                   <option key={faixa.path} value={faixa.path}>
                     ♪ {faixa.name}
@@ -237,12 +246,20 @@ export function SlideshowPanel(): JSX.Element {
             </button>
 
             {pastaTrilhas ? null : (
-              // Sem isto, "pasta de trilhas" não conta que é preciso BAIXAR
-              // antes: a biblioteca é online e exige login.
+              // Sem isto a tela não conta duas coisas que o usuário perguntou:
+              // que a biblioteca exige login, e que dá pra baixar na hora sem
+              // precisar montar pasta nenhuma.
               <p className="render-panel__hint">
-                A biblioteca é online e pede login no YouTube. Baixe as faixas que
-                quiser (elas são livres para uso comercial), salve numa pasta e
-                aponte ela aqui — depois é só escolher pelo nome.
+                A biblioteca é <strong>online e pede login no YouTube</strong>. Lá
+                cada faixa tem um botão de download — todas são livres para uso
+                comercial.
+                <br />
+                <strong>Para usar agora:</strong> baixe a faixa e clique em
+                “Adicionar música”. Não precisa de pasta.
+                <br />
+                <strong>A pasta é só atalho:</strong> se você reusa as mesmas
+                faixas, guarde todas num lugar e aponte aqui — daí é um clique
+                por vídeo.
                 <br />
                 Se o botão não abrir a página certa, o endereço é{" "}
                 <strong>studio.youtube.com/music</strong>.
