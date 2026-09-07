@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { net } from "electron";
 import {
   openDatabase,
   SqliteObjectRepository,
@@ -148,7 +149,12 @@ export function bootstrap(userDataDir: string, modelsDir: string) {
     // Busca de trilha livre. É o ÚNICO ponto do app que sai pra internet por
     // conta própria; tudo o mais roda offline, e a busca só acontece quando o
     // usuário digita e aperta buscar.
-    musicLibrary: new OpenverseMusicLibrary(),
+    //
+    // `net.fetch` e não o `fetch` do Node: só ele usa a pilha de rede do
+    // Chromium, com a configuração de proxy do sistema. Atrás do proxy de um
+    // escritório, o `fetch` do Node diria "sem internet" com o navegador da
+    // mesma máquina abrindo o site sem problema.
+    musicLibrary: new OpenverseMusicLibrary((url, init) => net.fetch(url, init)),
     exportVideo: new ExportVideoUseCase(projectRepository),
     sceneRepository,
     objectRepository,

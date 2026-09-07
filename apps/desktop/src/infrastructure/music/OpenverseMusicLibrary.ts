@@ -17,6 +17,16 @@ const USER_AGENT = "DigifyPropertyStudio/1.0 (+https://github.com/msrougi/digify
 const REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_LIMIT = 12;
 
+/**
+ * O mínimo que este adaptador precisa de um `fetch`.
+ *
+ * Deliberadamente mais estreito que o `fetch` global: o `net.fetch` do
+ * Electron aceita `string | Request`, não `URL`. Como aqui só se passa
+ * string, pedir a assinatura inteira do `fetch` rejeitaria justamente a
+ * implementação que o app usa de verdade.
+ */
+type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+
 interface OpenverseAudioItem {
   id?: string;
   title?: string;
@@ -49,6 +59,22 @@ interface OpenverseAudioItem {
  * adotar a mesma licença.
  */
 export class OpenverseMusicLibrary implements MusicLibrary {
+  /**
+   * @param fetchImpl Como fazer a requisição. O processo main recebe aqui o
+   * `net.fetch` do Electron, e não o `fetch` global do Node.
+   *
+   * A diferença não é estilo. O `fetch` do Node fala direto com a rede e
+   * **ignora a configuração de proxy do sistema**; o `net.fetch` usa a pilha
+   * do Chromium, a mesma do navegador — proxy, PAC, certificado corporativo,
+   * VPN. Num escritório atrás de proxy, o `fetch` do Node falharia com
+   * "sem internet" enquanto o navegador na mesma máquina abre a Openverse
+   * normalmente, e o usuário não teria como entender o porquê.
+   *
+   * O padrão é o `fetch` global pra este adaptador continuar testável fora
+   * do Electron, com um dublê no lugar da rede.
+   */
+  constructor(private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init)) {}
+
   async search(query: MusicSearchQuery): Promise<MusicSearchResult[]> {
     const params = new URLSearchParams({
       q: query.text,
@@ -122,7 +148,7 @@ export class OpenverseMusicLibrary implements MusicLibrary {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      return await fetch(url, {
+      return await this.fetchImpl(url, {
         headers: { "User-Agent": USER_AGENT },
         signal: controller.signal,
       });

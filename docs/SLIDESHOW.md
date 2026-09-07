@@ -364,6 +364,19 @@ faixa por vídeo destruiria isso em nome de economizar um clique.
 * **A pasta de destino vem das preferências, no processo main** — nunca do
   renderer. Aceitar um caminho vindo da tela daria à interface o poder de
   escrever em qualquer lugar do disco.
+* **A requisição usa `net.fetch` do Electron, não o `fetch` do Node.** Só o
+  primeiro passa pela pilha de rede do Chromium, com a configuração de proxy
+  do sistema, PAC e certificado corporativo. Atrás do proxy de um escritório,
+  o `fetch` do Node diria "sem internet" enquanto o navegador da mesma
+  máquina abre a Openverse — e o usuário não teria como entender o porquê.
+
+  Isto foi confirmado abrindo o app: com o `fetch` do Node o erro chegava
+  como um 403 cru do proxy; com o `net.fetch` chega como
+  `net::ERR_TUNNEL_CONNECTION_FAILED`, ou seja, ele de fato **enxergou o
+  proxy e tentou o túnel**. O `fetch` entra pelo construtor pra o adaptador
+  seguir testável fora do Electron, e dois testes garantem que o injetado é
+  mesmo o usado — sem eles, essa correção viraria código morto sem ninguém
+  notar, porque numa máquina sem proxy os dois se comportam igual.
 * **É o único ponto do app que sai pra internet por conta própria**, e só
   quando o usuário digita e aperta buscar. Todo o resto roda offline.
 * **`fetch` com prazo de 15s**: API fora do ar não pode deixar a tela travada

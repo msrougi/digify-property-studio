@@ -58,6 +58,54 @@ describe("OpenverseMusicLibrary — filtro de licença", () => {
   });
 });
 
+describe("OpenverseMusicLibrary — pilha de rede injetada", () => {
+  it("usa o fetch recebido, não o global", async () => {
+    // O processo main injeta o `net.fetch` do Electron pra respeitar o proxy
+    // do sistema. Se esta classe chamasse o `fetch` global por dentro, aquela
+    // injeção seria código morto e ninguém perceberia: nesta máquina, sem
+    // proxy, os dois se comportam igual.
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("o fetch global não devia ter sido chamado");
+    }) as unknown as typeof fetch;
+
+    const injetado = vi.fn(
+      async () => new Response(JSON.stringify({ results: [] }), { status: 200 }),
+    ) as unknown as typeof fetch;
+
+    await new OpenverseMusicLibrary(injetado).search({ text: "piano" });
+
+    expect(injetado).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("o download também passa pelo fetch injetado", async () => {
+    // Buscar pelo proxy e baixar por fora daria erro só na hora de baixar —
+    // o pior momento, depois do usuário já ter escolhido a faixa.
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("o fetch global não devia ter sido chamado");
+    }) as unknown as typeof fetch;
+
+    const injetado = vi.fn(
+      async () => new Response(new Blob([new Uint8Array([1])]), { status: 200 }),
+    ) as unknown as typeof fetch;
+
+    await new OpenverseMusicLibrary(injetado).download(
+      {
+        id: "1",
+        title: "Faixa",
+        creator: "A",
+        license: "cc0",
+        sourceUrl: "https://openverse.org/audio/1",
+        downloadUrl: "https://exemplo.org/faixa.mp3",
+      },
+      mkdtempSync(join(tmpdir(), "openverse-inj-")),
+    );
+
+    expect(injetado).toHaveBeenCalledOnce();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("OpenverseMusicLibrary — leitura defensiva", () => {
   it("descarta item sem os campos essenciais em vez de criar faixa quebrada", async () => {
     // O formato desta API não pôde ser confirmado no ambiente de
